@@ -1,4 +1,4 @@
-#!/bin/bash
+f#!/bin/bash
 # Walkies - App Locker with Step Goals Build & Setup Script
 # This script automates the initial setup process
 

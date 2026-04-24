@@ -12,8 +12,8 @@ Future<void> main() async {
   // Initialize Supabase with your credentials
   // Replace with your actual Supabase URL and anon key
   await Supabase.initialize(
-    url: 'YOUR_SUPABASE_URL', // e.g., 'https://xyzabc.supabase.co'
-    anonKey: 'YOUR_SUPABASE_ANON_KEY',
+    url: 'https://cbanimdilwtfmouyfumr.supabase.co',
+    anonKey: 'sb_publishable_6a52AMpgt5KIdS3KcGzEcQ_5P212w-l',
   );
 
   runApp(const MyApp());
