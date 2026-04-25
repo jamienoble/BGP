@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Walkies</string>
+    <string name="accessibility_service_description">Walkies uses accessibility service to enforce app locking based on your daily step goal. This allows the app to monitor when you try to launch a locked app and prevent access until you\'ve reached your step target.</string>
+</resources>

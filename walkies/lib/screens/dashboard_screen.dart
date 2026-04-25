@@ -1,7 +1,10 @@
+import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:walkies/models/step_goal.dart';
 import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/services/supabase_service.dart';
+import 'package:walkies/services/permissions_service.dart';
 import 'package:walkies/screens/goal_management_screen.dart';
 import 'package:walkies/screens/app_lock_settings_screen.dart';
 
@@ -19,6 +22,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   StepGoal? _stepGoal;
   int _currentSteps = 0;
   bool _isLoading = true;
+  StreamSubscription<int>? _stepSubscription;
 
   @override
   void initState() {
@@ -26,25 +30,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _loadData();
   }
 
+  @override
+  void dispose() {
+    _stepSubscription?.cancel();
+    super.dispose();
+  }
+
   Future<void> _loadData() async {
     try {
+      // Initialize step tracking (requests permission internally if needed)
       await _stepTrackingService.initialize();
 
       final goal = await _supabaseService.getStepGoal();
+      // Seed from DB in case the pedometer hasn't fired yet
       final today = await _supabaseService.getTodaySteps();
 
-      setState(() {
-        _stepGoal = goal;
-        _currentSteps = today?.steps ?? 0;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _stepGoal = goal;
+          _currentSteps = _stepTrackingService.todaySteps > 0
+              ? _stepTrackingService.todaySteps
+              : (today?.steps ?? 0);
+          _isLoading = false;
+        });
+        // Persist goal and steps to prefs for accessibility service
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('daily_goal', goal?.dailySteps ?? 7000);
+        await prefs.setInt('today_steps', _currentSteps);
+      }
 
-      // Listen to step updates
-      _stepTrackingService.stepCountStream.listen((event) {
+      // Listen to live step updates (today's delta, not raw lifetime count)
+      _stepSubscription = _stepTrackingService.todayStepsStream.listen((steps) async {
         if (mounted) {
           setState(() {
-            _currentSteps = event.steps;
+            _currentSteps = steps;
           });
+          // Persist to prefs for accessibility service
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt('today_steps', steps);
         }
       });
     } catch (e) {
@@ -95,6 +118,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            // Permission warning if step tracking failed
+            if (_stepTrackingService.initializationError != null)
+              Container(
+                padding: const EdgeInsets.all(12.0),
+                margin: const EdgeInsets.only(bottom: 16.0),
+                decoration: BoxDecoration(
+                  color: Colors.red[100],
+                  border: Border.all(color: Colors.red[700]!),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Step Tracking Issue',
+                      style: TextStyle(
+                        color: Colors.red[900],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _stepTrackingService.initializationError!,
+                      style: TextStyle(color: Colors.red[800], fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[700],
+                      ),
+                      onPressed: () async {
+                        final permissionsService = PermissionsService();
+                        await permissionsService.openAppSettings();
+                      },
+                      child: const Text(
+                        'Open Settings',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             // Steps Progress Card
             Card(
               elevation: 4,
@@ -193,3 +258,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
+
