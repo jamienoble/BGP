@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:walkies/services/supabase_service.dart';
+import 'package:walkies/services/network_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -15,6 +16,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _errorMessage;
 
   final _supabaseService = SupabaseService();
+  final _networkService = NetworkService();
 
   @override
   void dispose() {
@@ -30,6 +32,16 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      // Check connectivity first
+      final hasConnection = await _networkService.hasInternetConnection();
+      if (!hasConnection) {
+        setState(() {
+          _errorMessage =
+              'No internet connection. Please check your network and try again.';
+        });
+        return;
+      }
+
       await _supabaseService.signIn(
         _emailController.text,
         _passwordController.text,
@@ -40,7 +52,12 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString();
+        // Use network service to get a user-friendly error message
+        if (_networkService.isNetworkError(e)) {
+          _errorMessage = _networkService.getNetworkErrorMessage(e);
+        } else {
+          _errorMessage = e.toString();
+        }
       });
     } finally {
       if (mounted) {
@@ -58,6 +75,16 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      // Check connectivity first
+      final hasConnection = await _networkService.hasInternetConnection();
+      if (!hasConnection) {
+        setState(() {
+          _errorMessage =
+              'No internet connection. Please check your network and try again.';
+        });
+        return;
+      }
+
       await _supabaseService.signUp(
         _emailController.text,
         _passwordController.text,
@@ -70,7 +97,12 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString();
+        // Use network service to get a user-friendly error message
+        if (_networkService.isNetworkError(e)) {
+          _errorMessage = _networkService.getNetworkErrorMessage(e);
+        } else {
+          _errorMessage = e.toString();
+        }
       });
     } finally {
       if (mounted) {

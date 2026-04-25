@@ -3,9 +3,15 @@ import 'package:walkies/models/app_lock.dart';
 import 'package:walkies/models/daily_steps.dart';
 import 'package:walkies/models/step_goal.dart';
 import 'package:walkies/models/user.dart';
+import 'package:walkies/services/network_service.dart';
 
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
+  final NetworkService _networkService = NetworkService();
+
+  // Retry configuration
+  static const int _maxRetries = 3;
+  static const Duration _initialRetryDelay = Duration(milliseconds: 500);
 
   factory SupabaseService() {
     return _instance;
@@ -17,6 +23,42 @@ class SupabaseService {
 
   String? get currentUserId => client.auth.currentUser?.id;
 
+  /// Retry a future with exponential backoff on network errors
+  Future<T> _retryWithBackoff<T>(
+    Future<T> Function() operation, {
+    String operationName = 'Operation',
+  }) async {
+    int retryCount = 0;
+
+    while (true) {
+      try {
+        return await operation();
+      } catch (e) {
+        // If it's not a network error, rethrow immediately
+        if (!_networkService.isNetworkError(e)) {
+          rethrow;
+        }
+
+        retryCount++;
+
+        // If we've exhausted retries, rethrow
+        if (retryCount >= _maxRetries) {
+          rethrow;
+        }
+
+        // Calculate exponential backoff: 500ms, 1s, 2s, etc.
+        final delay = _initialRetryDelay * (1 << (retryCount - 1));
+
+        print(
+          'Network error in $operationName. Retrying in ${delay.inMilliseconds}ms... '
+          '(Attempt $retryCount/$_maxRetries)',
+        );
+
+        await Future.delayed(delay);
+      }
+    }
+  }
+
   // ==================== User Management ====================
   Future<AppUser?> getCurrentUser() async {
     final user = client.auth.currentUser;
@@ -25,11 +67,17 @@ class SupabaseService {
   }
 
   Future<AuthResponse> signUp(String email, String password) async {
-    return await client.auth.signUp(email: email, password: password);
+    return await _retryWithBackoff(
+      () => client.auth.signUp(email: email, password: password),
+      operationName: 'Sign up',
+    );
   }
 
   Future<AuthResponse> signIn(String email, String password) async {
-    return await client.auth.signInWithPassword(email: email, password: password);
+    return await _retryWithBackoff(
+      () => client.auth.signInWithPassword(email: email, password: password),
+      operationName: 'Sign in',
+    );
   }
 
   Future<void> signOut() async {
