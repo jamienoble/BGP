@@ -7,6 +7,81 @@ class AppLockerService {
   static final AppLockerService _instance = AppLockerService._internal();
   static const platform = MethodChannel('com.example.walkies/app_locking');
 
+  // Common social media app package names
+  static const Set<String> _socialMediaPackages = {
+    // Facebook
+    'com.facebook.katana',
+    'com.facebook.lite',
+    'com.facebook.orca', // Messenger
+    
+    // Instagram
+    'com.instagram.android',
+    'com.instagram.lite',
+    
+    // Twitter / X
+    'com.twitter.android',
+    'com.x.android',
+    
+    // TikTok
+    'com.zhiliaoapp.musically',
+    'com.ss.android.ugc.tiktok',
+    
+    // Snapchat
+    'com.snapchat.android',
+    
+    // WhatsApp
+    'com.whatsapp',
+    'com.whatsapp.w4b',
+    
+    // Telegram
+    'org.telegram.messenger',
+    'org.telegram.messenger.web',
+    
+    // LinkedIn
+    'com.linkedin.android',
+    
+    // Reddit
+    'com.reddit.frontpage',
+    
+    // Viber
+    'com.viber.voip',
+    
+    // WeChat
+    'com.tencent.mm',
+    
+    // QQ
+    'com.tencent.mobileqq',
+    
+    // Discord
+    'com.discord',
+    
+    // Nextdoor
+    'com.nextdoor',
+    
+    // BeReal
+    'com.bereal.io',
+    
+    // Pinterest
+    'com.pinterest',
+    
+    // Mastodon
+    'org.joinmastodon.android',
+    'sh.gab.messenger',
+    
+    // Bluesky
+    'xyz.blusky',
+    
+    // YouTube (video streaming/social)
+    'com.google.android.youtube',
+    'com.google.android.youtube.tv',
+    
+    // Twitch
+    'tv.twitch.android.app',
+    
+    // Threads
+    'com.instagram.threads',
+  };
+
   factory AppLockerService() {
     return _instance;
   }
@@ -21,6 +96,14 @@ class AppLockerService {
       onlyAppsWithLaunchIntent: true,
     );
     return apps;
+  }
+
+  /// Get only social media apps that are installed
+  Future<List<Application>> getSocialMediaApps() async {
+    final allApps = await getInstalledApps();
+    return allApps
+        .where((app) => _socialMediaPackages.contains(app.packageName))
+        .toList();
   }
 
   Future<bool> isAppLocked(String packageName) async {

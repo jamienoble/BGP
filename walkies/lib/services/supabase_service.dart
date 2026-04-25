@@ -227,6 +227,21 @@ class SupabaseService {
     }
   }
 
+  /// Get daily steps for a specific date (format: yyyy-MM-dd)
+  Future<DailySteps?> getTodayStepsForDate(String dateStr) async {
+    final userId = currentUserId;
+    if (userId == null) return null;
+
+    final response = await client
+        .from('daily_steps')
+        .select()
+        .eq('user_id', userId)
+        .eq('date', dateStr)
+        .maybeSingle();
+
+    return response != null ? DailySteps.fromJson(response) : null;
+  }
+
   Future<List<DailySteps>> getStepsHistory(int days) async {
     final userId = currentUserId;
     if (userId == null) return [];

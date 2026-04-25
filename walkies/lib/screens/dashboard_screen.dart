@@ -5,8 +5,10 @@ import 'package:walkies/models/step_goal.dart';
 import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/services/permissions_service.dart';
+import 'package:walkies/services/notification_service.dart';
 import 'package:walkies/screens/goal_management_screen.dart';
 import 'package:walkies/screens/app_lock_settings_screen.dart';
+import 'package:walkies/widgets/weekly_streak_widget.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -18,22 +20,86 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final _supabaseService = SupabaseService();
   final _stepTrackingService = StepTrackingService();
+  final _notificationService = NotificationService();
 
   StepGoal? _stepGoal;
   int _currentSteps = 0;
   bool _isLoading = true;
   StreamSubscription<int>? _stepSubscription;
 
+  // Streak tracking
+  Map<DateTime, bool> _dailyGoalsMet = {};
+  int _currentStreak = 0;
+  bool _goalNotificationSent = false;
+
   @override
   void initState() {
     super.initState();
     _loadData();
+    _initializeNotifications();
   }
 
   @override
   void dispose() {
     _stepSubscription?.cancel();
     super.dispose();
+  }
+
+  /// Initialize notification service and load daily streak data
+  Future<void> _initializeNotifications() async {
+    try {
+      await _notificationService.initialize();
+      await _loadDailyGoalsMet();
+    } catch (e) {
+      print('Error initializing notifications: $e');
+    }
+  }
+
+  /// Load which days of the week had goals met
+  Future<void> _loadDailyGoalsMet() async {
+    try {
+      final userId = _supabaseService.currentUserId;
+      if (userId == null) return;
+
+      // Get last 7 days of daily steps
+      final now = DateTime.now();
+      final sevenDaysAgo = now.subtract(const Duration(days: 6));
+
+      Map<DateTime, bool> goalsMet = {};
+
+      for (int i = 0; i < 7; i++) {
+        final date = sevenDaysAgo.add(Duration(days: i));
+        final dateStr = date.toIso8601String().split('T')[0];
+
+        // Get daily steps for this date
+        final dailySteps = await _supabaseService.getTodayStepsForDate(dateStr);
+        final stepGoal = _stepGoal?.dailySteps ?? 7000;
+
+        goalsMet[DateTime(date.year, date.month, date.day)] =
+            (dailySteps?.steps ?? 0) >= stepGoal;
+      }
+
+      // Calculate current streak
+      int streak = 0;
+      for (int i = 6; i >= 0; i--) {
+        final date = sevenDaysAgo.add(Duration(days: i));
+        if (goalsMet[DateTime(date.year, date.month, date.day)] ?? false) {
+          streak++;
+        } else if (i != 6) {
+          // Only break if it's not today (allow today to be incomplete)
+          break;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _dailyGoalsMet = goalsMet;
+          _currentStreak = streak;
+        });
+      }
+    } catch (e) {
+      print('Error loading daily goals: $e');
+    }
   }
 
   Future<void> _loadData() async {
@@ -60,7 +126,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
 
       // Listen to live step updates (today's delta, not raw lifetime count)
-      _stepSubscription = _stepTrackingService.todayStepsStream.listen((steps) async {
+      _stepSubscription = _stepTrackingService.todayStepsStream.listen((
+        steps,
+      ) async {
         if (mounted) {
           setState(() {
             _currentSteps = steps;
@@ -68,6 +136,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Persist to prefs for accessibility service
           final prefs = await SharedPreferences.getInstance();
           await prefs.setInt('today_steps', steps);
+
+          // Handle notifications
+          final goalSteps = _stepGoal?.dailySteps ?? 7000;
+          final progress = (steps / goalSteps) * 100;
+
+          // Send notification when reaching ~80% of goal
+          if (progress >= 80 && !_goalNotificationSent && goalSteps > 0) {
+            _goalNotificationSent = true;
+            await _notificationService.sendGoalNearCompletionNotification(
+              currentSteps: steps,
+              goalSteps: goalSteps,
+              stepsRemaining: (goalSteps - steps).clamp(0, goalSteps),
+            );
+          }
+
+          // Send notification when goal is completed
+          if (steps >= goalSteps && goalSteps > 0) {
+            await _notificationService.sendGoalCompletedNotification();
+            await _loadDailyGoalsMet(); // Update streak
+          }
         }
       });
     } catch (e) {
@@ -86,18 +174,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Navigator.of(context).pushReplacementNamed('/login');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final goalSteps = _stepGoal?.dailySteps ?? 0;
@@ -108,10 +194,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: const Text('Walkies Dashboard'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _signOut,
-          ),
+          IconButton(icon: const Icon(Icons.logout), onPressed: _signOut),
         ],
       ),
       body: SingleChildScrollView(
@@ -167,7 +250,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   children: [
-                    const Text('Today\'s Steps', style: TextStyle(fontSize: 16)),
+                    const Text(
+                      'Today\'s Steps',
+                      style: TextStyle(fontSize: 16),
+                    ),
                     const SizedBox(height: 16),
                     Stack(
                       alignment: Alignment.center,
@@ -218,6 +304,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 24),
 
+            // Weekly Streak Widget
+            WeeklyStreakWidget(
+              dailyGoalsMet: _dailyGoalsMet,
+              currentStreak: _currentStreak,
+            ),
+            const SizedBox(height: 24),
+
             // App Lock Status
             Card(
               elevation: 4,
@@ -244,11 +337,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 subtitle: Text('${goalSteps} steps'),
                 trailing: const Icon(Icons.arrow_forward),
                 onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const GoalManagementScreen(),
-                    ),
-                  ).then((_) => _loadData());
+                  Navigator.of(context)
+                      .push(
+                        MaterialPageRoute(
+                          builder: (context) => const GoalManagementScreen(),
+                        ),
+                      )
+                      .then((_) => _loadData());
                 },
               ),
             ),
@@ -258,4 +353,3 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
-

@@ -1,8 +1,37 @@
+package com.example.walkies
+
+import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.view.accessibility.AccessibilityEvent
+import android.widget.Toast
+import java.util.concurrent.ConcurrentHashMap
+
 class AppBlockingAccessibilityService : AccessibilityService() {
     companion object {
         const val PREFS_NAME = "app_locking_prefs"
         const val LOCKED_APPS_KEY = "locked_apps"
         private const val BLOCK_COOLDOWN_MS = 3000L
+
+        /**
+         * Retrieve the set of locked app package names from SharedPreferences
+         */
+        fun getLockedApps(context: Context): Set<String> {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val appsList = prefs.getString(LOCKED_APPS_KEY, "") ?: ""
+            return if (appsList.isEmpty()) emptySet() else appsList.split(",").toSet()
+        }
+
+        /**
+         * Save the set of locked app package names to SharedPreferences
+         */
+        fun setLockedApps(context: Context, packages: Set<String>) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val appsList = packages.joinToString(",")
+            prefs.edit().putString(LOCKED_APPS_KEY, appsList).apply()
+        }
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())

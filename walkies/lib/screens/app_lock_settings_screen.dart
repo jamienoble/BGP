@@ -27,7 +27,8 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen> {
 
   Future<void> _loadData() async {
     try {
-      final apps = await _appLockerService.getInstalledApps();
+      // Only load social media apps instead of all apps
+      final apps = await _appLockerService.getSocialMediaApps();
       final lockedApps = await _supabaseService.getLockedApps();
       final lockedIds = lockedApps.map((app) => app.appPackageName).toList();
       final isServiceEnabled = await _appLockerService.isAppLockingEnabled();
@@ -41,7 +42,7 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading apps: $e')),
+          SnackBar(content: Text('Error loading social media apps: $e')),
         );
       }
       setState(() {
@@ -114,7 +115,7 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Lock Apps')),
+        appBar: AppBar(title: const Text('Lock Social Media Apps')),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -123,7 +124,7 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen> {
     final lockedIds = _lockedAppIds ?? [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Lock Apps')),
+      appBar: AppBar(title: const Text('Lock Social Media Apps')),
       body: Column(
         children: [
           // Accessibility Service Status Banner
@@ -160,10 +161,17 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen> {
                     ),
                   ],
                 ),
+                if (_isAccessibilityServiceEnabled) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Select social media apps below to lock until you reach your daily step goal.',
+                    style: TextStyle(color: Colors.green[800], fontSize: 12),
+                  ),
+                ],
                 if (!_isAccessibilityServiceEnabled) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Enable the Walkies accessibility service to lock apps.\n'
+                    'Enable the Walkies accessibility service to lock social media apps.\n'
                     'If you see "denied access", go to Settings → Apps → Walkies → ⋮ → Allow restricted settings first.',
                     style: TextStyle(color: Colors.orange[800], fontSize: 12),
                   ),
@@ -186,30 +194,39 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen> {
           ),
           // Apps List
           Expanded(
-            child: ListView.builder(
-              itemCount: apps.length,
-              itemBuilder: (context, index) {
-                final app = apps[index];
-                final isLocked = lockedIds.contains(app.packageName);
+            child: apps.isEmpty
+                ? Center(
+                    child: Text(
+                      'No supported social media apps found.\n'
+                      'Install supported apps to lock them.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: apps.length,
+                    itemBuilder: (context, index) {
+                      final app = apps[index];
+                      final isLocked = lockedIds.contains(app.packageName);
 
-                return ListTile(
-                  leading: app is ApplicationWithIcon
-                      ? Image.memory(app.icon, width: 40, height: 40)
-                      : const Icon(Icons.apps),
-                  title: Text(app.appName),
-                  subtitle: Text(
-                    app.packageName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                      return ListTile(
+                        leading: app is ApplicationWithIcon
+                            ? Image.memory(app.icon, width: 40, height: 40)
+                            : const Icon(Icons.apps),
+                        title: Text(app.appName),
+                        subtitle: Text(
+                          app.packageName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Switch(
+                          value: isLocked,
+                          onChanged: (_) => _toggleAppLock(app),
+                        ),
+                      );
+                    },
                   ),
-                  trailing: Switch(
-                    value: isLocked,
-                    onChanged: (_) => _toggleAppLock(app),
-                  ),
-                );
-              },
             ),
-          ),
         ],
       ),
     );
