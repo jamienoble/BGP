@@ -12,7 +12,7 @@ Future<void> main() async {
   // Initialize Supabase with your credentials
   // Replace with your actual Supabase URL and anon key
   await Supabase.initialize(
-    url: 'https://cbanimdilwtfmouyfumr.supabase.co',
+    url: 'https://cbanimdilwtfmouyfumr.supabase.co', // e.g., 'https://xyzabc.supabase.co'
     anonKey: 'sb_publishable_6a52AMpgt5KIdS3KcGzEcQ_5P212w-l',
   );
 
