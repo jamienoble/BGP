@@ -11,7 +11,7 @@ class NotificationService {
 
   NotificationService._internal();
 
-  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  FirebaseMessaging? _firebaseMessaging;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
@@ -23,7 +23,9 @@ class NotificationService {
     }
 
     // Request notification permissions (mobile only)
-    await _firebaseMessaging.requestPermission(
+    _firebaseMessaging = FirebaseMessaging.instance;
+
+    await _firebaseMessaging!.requestPermission(
       alert: true,
       announcement: true,
       badge: true,
