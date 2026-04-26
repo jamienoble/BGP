@@ -54,7 +54,7 @@ class NotificationService {
       iOS: iOSSettings,
     );
 
-    await _localNotifications.initialize(initSettings);
+    await _localNotifications.initialize(settings: initSettings);
   }
 
   static Future<void> _firebaseMessagingBackgroundHandler(
@@ -96,10 +96,10 @@ class NotificationService {
     );
 
     await _localNotifications.show(
-      DateTime.now().hashCode,
-      title,
-      body,
-      details,
+      id: DateTime.now().hashCode,
+      title: title,
+      body: body,
+      notificationDetails: details,
     );
   }
 

@@ -26,6 +26,8 @@ class StepTrackingService {
   String _baselineDate = '';
   // Current today's step count
   int _todaySteps = 0;
+  int _lastRawSteps = 0;
+  DateTime? _lastStepEventAt;
 
   final SupabaseService _supabaseService = SupabaseService();
   final PermissionsService _permissionsService = PermissionsService();
@@ -88,6 +90,7 @@ class StepTrackingService {
   void _onStepCount(StepCount event) async {
     final rawSteps = event.steps;
     final todayDate = _todayDateString();
+    final now = DateTime.now();
 
     final prefs = await SharedPreferences.getInstance();
 
@@ -105,7 +108,32 @@ class StepTrackingService {
       _baselineDate = todayDate;
       await prefs.setInt('step_baseline_value', _pedometerBaseline);
       await prefs.setString('step_baseline_date', _baselineDate);
+      _lastRawSteps = rawSteps;
+      _lastStepEventAt = now;
+      _todayStepsController.add(0);
+      await prefs.setInt("today_steps", 0);
+      return;
     }
+
+    // Basic sanity filtering to avoid noisy spikes from over-sensitive sensors.
+    if (_lastRawSteps > 0 && rawSteps < _lastRawSteps) {
+      return;
+    }
+    if (_lastRawSteps > 0 && _lastStepEventAt != null) {
+      final deltaSteps = rawSteps - _lastRawSteps;
+      final elapsedSeconds =
+          now.difference(_lastStepEventAt!).inMilliseconds / 1000.0;
+      if (elapsedSeconds > 0) {
+        final stepsPerSecond = deltaSteps / elapsedSeconds;
+        // Ignore implausible bursts (e.g. shake/noise events).
+        if (stepsPerSecond > 4.0) {
+          return;
+        }
+      }
+    }
+
+    _lastRawSteps = rawSteps;
+    _lastStepEventAt = now;
 
     // Today's steps = current raw value minus the baseline at start of day
     _todaySteps = (rawSteps - _pedometerBaseline).clamp(0, 999999);

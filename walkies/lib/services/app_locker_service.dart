@@ -139,6 +139,26 @@ class AppLockerService {
     return await _supabaseService.getLockedApps();
   }
 
+  /// Sync cloud-locked apps down to native accessibility service.
+  Future<void> syncLockedAppsToAccessibilityService() async {
+    await _updateAccessibilityServiceLockedApps();
+  }
+
+  /// Keep native step/goal prefs in sync for accessibility checks.
+  Future<void> syncNativeStepGoalPrefs({
+    required int dailyGoal,
+    required int todaySteps,
+  }) async {
+    try {
+      await platform.invokeMethod<bool>('syncStepGoalData', {
+        'dailyGoal': dailyGoal,
+        'todaySteps': todaySteps,
+      });
+    } catch (_) {
+      // Ignore if native bridge is temporarily unavailable.
+    }
+  }
+
   /// Update the accessibility service with current locked apps
   Future<void> _updateAccessibilityServiceLockedApps() async {
     try {

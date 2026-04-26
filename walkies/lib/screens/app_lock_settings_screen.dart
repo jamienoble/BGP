@@ -10,19 +10,35 @@ class AppLockSettingsScreen extends StatefulWidget {
   State<AppLockSettingsScreen> createState() => _AppLockSettingsScreenState();
 }
 
-class _AppLockSettingsScreenState extends State<AppLockSettingsScreen> {
+class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
+    with WidgetsBindingObserver {
   final _appLockerService = AppLockerService();
   final _supabaseService = SupabaseService();
 
   List<Application>? _installedApps;
   List<String>? _lockedAppIds;
+  final Set<String> _savingPackages = {};
   bool _isLoading = true;
   bool _isAccessibilityServiceEnabled = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadData();
+    }
   }
 
   Future<void> _loadData() async {
@@ -32,6 +48,14 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen> {
       final lockedApps = await _supabaseService.getLockedApps();
       final lockedIds = lockedApps.map((app) => app.appPackageName).toList();
       final isServiceEnabled = await _appLockerService.isAppLockingEnabled();
+      final stepGoal = await _supabaseService.getStepGoal();
+      final todaySteps = await _supabaseService.getTodaySteps();
+
+      await _appLockerService.syncNativeStepGoalPrefs(
+        dailyGoal: stepGoal?.dailySteps ?? 7000,
+        todaySteps: todaySteps?.steps ?? 0,
+      );
+      await _appLockerService.syncLockedAppsToAccessibilityService();
 
       setState(() {
         _installedApps = apps;
@@ -42,7 +66,9 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading social media apps: $e')),
+          const SnackBar(
+            content: Text('Could not load app locks. Pull to refresh and try again.'),
+          ),
         );
       }
       setState(() {
@@ -88,6 +114,18 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen> {
 
     final packageName = app.packageName;
     final isCurrentlyLocked = _lockedAppIds?.contains(packageName) ?? false;
+    if (_savingPackages.contains(packageName)) return;
+
+    setState(() {
+      _savingPackages.add(packageName);
+      final current = _lockedAppIds ?? <String>[];
+      if (isCurrentlyLocked) {
+        current.remove(packageName);
+      } else {
+        current.add(packageName);
+      }
+      _lockedAppIds = List<String>.from(current);
+    });
 
     try {
       if (isCurrentlyLocked) {
@@ -100,13 +138,26 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen> {
         final appName = app.appName;
         await _appLockerService.lockApp(packageName, appName);
       }
-
-      await _loadData();
     } catch (e) {
+      final current = _lockedAppIds ?? <String>[];
+      if (isCurrentlyLocked) {
+        current.add(packageName);
+      } else {
+        current.remove(packageName);
+      }
       if (mounted) {
+        setState(() {
+          _lockedAppIds = List<String>.from(current);
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(content: Text('Could not update app lock. Please try again.')),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingPackages.remove(packageName);
+        });
       }
     }
   }
@@ -208,20 +259,16 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen> {
                     itemBuilder: (context, index) {
                       final app = apps[index];
                       final isLocked = lockedIds.contains(app.packageName);
+                      final isSaving = _savingPackages.contains(app.packageName);
 
                       return ListTile(
                         leading: app is ApplicationWithIcon
                             ? Image.memory(app.icon, width: 40, height: 40)
                             : const Icon(Icons.apps),
                         title: Text(app.appName),
-                        subtitle: Text(
-                          app.packageName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
                         trailing: Switch(
                           value: isLocked,
-                          onChanged: (_) => _toggleAppLock(app),
+                          onChanged: isSaving ? null : (_) => _toggleAppLock(app),
                         ),
                       );
                     },

@@ -18,6 +18,26 @@ class _LoginScreenState extends State<LoginScreen> {
   final _supabaseService = SupabaseService();
   final _networkService = NetworkService();
 
+  String _friendlyAuthError(Object error) {
+    if (_networkService.isNetworkError(error)) {
+      return _networkService.getNetworkErrorMessage(error);
+    }
+    final message = error.toString().toLowerCase();
+    if (message.contains('invalid login credentials')) {
+      return 'Email or password is incorrect. Please try again.';
+    }
+    if (message.contains('email not confirmed')) {
+      return 'Please confirm your email before signing in.';
+    }
+    if (message.contains('user already registered')) {
+      return 'An account with this email already exists. Please sign in.';
+    }
+    if (message.contains('password')) {
+      return 'Password requirements were not met. Please use a stronger password.';
+    }
+    return 'Something went wrong. Please try again.';
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -52,12 +72,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       setState(() {
-        // Use network service to get a user-friendly error message
-        if (_networkService.isNetworkError(e)) {
-          _errorMessage = _networkService.getNetworkErrorMessage(e);
-        } else {
-          _errorMessage = e.toString();
-        }
+        _errorMessage = _friendlyAuthError(e);
       });
     } finally {
       if (mounted) {
@@ -97,12 +112,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       setState(() {
-        // Use network service to get a user-friendly error message
-        if (_networkService.isNetworkError(e)) {
-          _errorMessage = _networkService.getNetworkErrorMessage(e);
-        } else {
-          _errorMessage = e.toString();
-        }
+        _errorMessage = _friendlyAuthError(e);
       });
     } finally {
       if (mounted) {
@@ -123,11 +133,18 @@ class _LoginScreenState extends State<LoginScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (_errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16.0),
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 16.0),
+                padding: const EdgeInsets.all(12.0),
+                decoration: BoxDecoration(
+                  color: Colors.orange[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
                 child: Text(
                   _errorMessage!,
-                  style: const TextStyle(color: Colors.red),
+                  style: TextStyle(color: Colors.orange.shade900),
                 ),
               ),
             TextField(

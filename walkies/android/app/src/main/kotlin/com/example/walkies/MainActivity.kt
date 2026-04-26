@@ -32,6 +32,16 @@ class MainActivity : FlutterActivity() {
             AppBlockingAccessibilityService.setLockedApps(this, packageSet)
             result.success(true)
           }
+          "syncStepGoalData" -> {
+            val dailyGoal = call.argument<Int>("dailyGoal") ?: 7000
+            val todaySteps = call.argument<Int>("todaySteps") ?: 0
+            val prefs = getSharedPreferences("step_prefs", Context.MODE_PRIVATE)
+            prefs.edit()
+              .putInt("daily_goal", dailyGoal)
+              .putInt("today_steps", todaySteps)
+              .apply()
+            result.success(true)
+          }
           "isAppLockingEnabled" -> {
             val isEnabled = isAccessibilityServiceEnabled()
             result.success(isEnabled)

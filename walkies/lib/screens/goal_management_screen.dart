@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkies/services/supabase_service.dart';
 
 class GoalManagementScreen extends StatefulWidget {
@@ -48,6 +49,16 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
       );
       return;
     }
+    if (_currentGoal != null && newGoal < _currentGoal!) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Goal cannot be reduced below your current goal ($_currentGoal).',
+          ),
+        ),
+      );
+      return;
+    }
 
     setState(() {
       _isSaving = true;
@@ -55,6 +66,8 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
 
     try {
       await _supabaseService.createOrUpdateStepGoal(newGoal);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('daily_goal', newGoal);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Goal updated successfully')),
@@ -64,7 +77,9 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving goal: $e')),
+          const SnackBar(
+            content: Text('Could not save your goal. Please try again.'),
+          ),
         );
       }
     } finally {

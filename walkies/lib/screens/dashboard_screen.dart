@@ -6,6 +6,7 @@ import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/services/permissions_service.dart';
 import 'package:walkies/services/notification_service.dart';
+import 'package:walkies/services/app_locker_service.dart';
 import 'package:walkies/screens/goal_management_screen.dart';
 import 'package:walkies/screens/app_lock_settings_screen.dart';
 import 'package:walkies/widgets/weekly_streak_widget.dart';
@@ -17,10 +18,12 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with WidgetsBindingObserver {
   final _supabaseService = SupabaseService();
   final _stepTrackingService = StepTrackingService();
   final _notificationService = NotificationService();
+  final _appLockerService = AppLockerService();
 
   StepGoal? _stepGoal;
   int _currentSteps = 0;
@@ -35,23 +38,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadData();
     _initializeNotifications();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _stepSubscription?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadData();
+    }
   }
 
   /// Initialize notification service and load daily streak data
   Future<void> _initializeNotifications() async {
     try {
+      await PermissionsService().requestNotificationPermission();
       await _notificationService.initialize();
       await _loadDailyGoalsMet();
     } catch (e) {
-      print('Error initializing notifications: $e');
+      debugPrint('Error initializing notifications: $e');
     }
   }
 
@@ -98,7 +111,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
       }
     } catch (e) {
-      print('Error loading daily goals: $e');
+      debugPrint('Error loading daily goals: $e');
     }
   }
 
@@ -123,6 +136,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setInt('daily_goal', goal?.dailySteps ?? 7000);
         await prefs.setInt('today_steps', _currentSteps);
+        await _appLockerService.syncNativeStepGoalPrefs(
+          dailyGoal: goal?.dailySteps ?? 7000,
+          todaySteps: _currentSteps,
+        );
       }
 
       // Listen to live step updates (today's delta, not raw lifetime count)
@@ -136,6 +153,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Persist to prefs for accessibility service
           final prefs = await SharedPreferences.getInstance();
           await prefs.setInt('today_steps', steps);
+          await _appLockerService.syncNativeStepGoalPrefs(
+            dailyGoal: _stepGoal?.dailySteps ?? 7000,
+            todaySteps: steps,
+          );
 
           // Handle notifications
           final goalSteps = _stepGoal?.dailySteps ?? 7000;
@@ -207,38 +228,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.all(12.0),
                 margin: const EdgeInsets.only(bottom: 16.0),
                 decoration: BoxDecoration(
-                  color: Colors.red[100],
-                  border: Border.all(color: Colors.red[700]!),
+                  color: Colors.orange[50],
+                  border: Border.all(color: Colors.orange[300]!),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Step Tracking Issue',
+                      'Permission Needed',
                       style: TextStyle(
-                        color: Colors.red[900],
+                        color: Colors.orange[900],
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _stepTrackingService.initializationError!,
-                      style: TextStyle(color: Colors.red[800], fontSize: 13),
+                      'Walkies needs Activity Recognition permission to keep your step progress accurate.',
+                      style: TextStyle(color: Colors.orange[800], fontSize: 13),
                     ),
                     const SizedBox(height: 8),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red[700],
-                      ),
-                      onPressed: () async {
-                        final permissionsService = PermissionsService();
-                        await permissionsService.openAppSettings();
-                      },
-                      child: const Text(
-                        'Open Settings',
-                        style: TextStyle(color: Colors.white),
-                      ),
+                    Row(
+                      children: [
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange[700],
+                          ),
+                          onPressed: () async {
+                            final permissionsService = PermissionsService();
+                            await permissionsService.openAppSettings();
+                          },
+                          child: const Text(
+                            'Open Settings',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          onPressed: _loadData,
+                          child: const Text('Refresh'),
+                        ),
+                      ],
                     ),
                   ],
                 ),
