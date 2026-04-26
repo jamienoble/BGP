@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkies/services/supabase_service.dart';
@@ -41,25 +43,17 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
     }
   }
 
-  Future<void> _saveGoal() async {
-    final newGoal = int.tryParse(_goalController.text);
-    if (newGoal == null || newGoal <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid step count')),
-      );
-      return;
-    }
-    if (_currentGoal != null && newGoal < _currentGoal!) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Goal cannot be reduced below your current goal ($_currentGoal).',
-          ),
-        ),
-      );
-      return;
-    }
+  Future<void> _resetStreak() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('streak_days_met_v1', jsonEncode(<String, bool>{}));
+    await prefs.setInt('streak_current_v1', 0);
+    await prefs.setString(
+      'streak_reset_date_v1',
+      DateTime.now().toIso8601String().split('T')[0],
+    );
+  }
 
+  Future<void> _persistGoal(int newGoal, {required bool resetStreak}) async {
     setState(() {
       _isSaving = true;
     });
@@ -68,9 +62,18 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
       await _supabaseService.createOrUpdateStepGoal(newGoal);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('daily_goal', newGoal);
+      if (resetStreak) {
+        await _resetStreak();
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Goal updated successfully')),
+          SnackBar(
+            content: Text(
+              resetStreak
+                  ? 'Goal updated. Your streak has been reset.'
+                  : 'Goal updated successfully',
+            ),
+          ),
         );
         Navigator.of(context).pop();
       }
@@ -89,6 +92,46 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
         });
       }
     }
+  }
+
+  Future<void> _saveGoal() async {
+    final newGoal = int.tryParse(_goalController.text);
+    if (newGoal == null || newGoal <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid step count')),
+      );
+      return;
+    }
+    final isGoalReduced = _currentGoal != null && newGoal < _currentGoal!;
+    if (isGoalReduced) {
+      final shouldReset = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Reset streak?'),
+          content: Text(
+            'Reducing your goal from ${_currentGoal!} to $newGoal '
+            'will reset your streak to 0. Continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      if (shouldReset != true) {
+        return;
+      }
+      await _persistGoal(newGoal, resetStreak: true);
+      return;
+    }
+
+    await _persistGoal(newGoal, resetStreak: false);
   }
 
   @override

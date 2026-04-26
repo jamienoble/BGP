@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:walkies/models/step_goal.dart';
@@ -20,6 +21,10 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen>
     with WidgetsBindingObserver {
+  static const String _streakDaysMetKey = 'streak_days_met_v1';
+  static const String _streakCurrentKey = 'streak_current_v1';
+  static const String _streakResetDateKey = 'streak_reset_date_v1';
+
   final _supabaseService = SupabaseService();
   final _stepTrackingService = StepTrackingService();
   final _notificationService = NotificationService();
@@ -68,11 +73,55 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
+  String _dateKey(DateTime date) =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  Future<Map<String, bool>> _readStreakMap(SharedPreferences prefs) async {
+    final raw = prefs.getString(_streakDaysMetKey);
+    if (raw == null || raw.isEmpty) return <String, bool>{};
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      return decoded.map((k, v) => MapEntry(k, v == true));
+    } catch (_) {
+      return <String, bool>{};
+    }
+  }
+
+  Future<void> _writeStreakMap(
+    SharedPreferences prefs,
+    Map<String, bool> streakMap,
+  ) async {
+    await prefs.setString(_streakDaysMetKey, jsonEncode(streakMap));
+  }
+
+  Future<void> _updateTodayStreakStatus(int steps, int goalSteps) async {
+    if (goalSteps <= 0) return;
+    final prefs = await SharedPreferences.getInstance();
+    final streakMap = await _readStreakMap(prefs);
+    final today = DateTime.now();
+    final todayKey = _dateKey(today);
+    final resetDate = prefs.getString(_streakResetDateKey);
+    final wasResetToday = resetDate == todayKey;
+
+    streakMap[todayKey] = !wasResetToday && steps >= goalSteps;
+
+    // Keep only recent entries
+    final cutoff = today.subtract(const Duration(days: 35));
+    streakMap.removeWhere((k, _) {
+      final parsed = DateTime.tryParse(k);
+      if (parsed == null) return true;
+      return parsed.isBefore(DateTime(cutoff.year, cutoff.month, cutoff.day));
+    });
+    await _writeStreakMap(prefs, streakMap);
+  }
+
   /// Load which days of the week had goals met
   Future<void> _loadDailyGoalsMet() async {
     try {
       final userId = _supabaseService.currentUserId;
       if (userId == null) return;
+      final prefs = await SharedPreferences.getInstance();
+      final streakMap = await _readStreakMap(prefs);
 
       // Get last 7 days of daily steps
       final now = DateTime.now();
@@ -83,6 +132,12 @@ class _DashboardScreenState extends State<DashboardScreen>
       for (int i = 0; i < 7; i++) {
         final date = sevenDaysAgo.add(Duration(days: i));
         final dateStr = date.toIso8601String().split('T')[0];
+        final dayKey = _dateKey(date);
+        if (streakMap.containsKey(dayKey)) {
+          goalsMet[DateTime(date.year, date.month, date.day)] =
+              streakMap[dayKey] ?? false;
+          continue;
+        }
 
         // Get daily steps for this date
         final dailySteps = await _supabaseService.getTodayStepsForDate(dateStr);
@@ -90,6 +145,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
         goalsMet[DateTime(date.year, date.month, date.day)] =
             (dailySteps?.steps ?? 0) >= stepGoal;
+        streakMap[dayKey] = goalsMet[DateTime(date.year, date.month, date.day)]!;
       }
 
       // Calculate current streak
@@ -103,6 +159,8 @@ class _DashboardScreenState extends State<DashboardScreen>
           break;
         }
       }
+      await _writeStreakMap(prefs, streakMap);
+      await prefs.setInt(_streakCurrentKey, streak);
 
       if (mounted) {
         setState(() {
@@ -140,6 +198,8 @@ class _DashboardScreenState extends State<DashboardScreen>
           dailyGoal: goal?.dailySteps ?? 7000,
           todaySteps: _currentSteps,
         );
+        await _updateTodayStreakStatus(_currentSteps, goal?.dailySteps ?? 7000);
+        await _loadDailyGoalsMet();
       }
 
       // Listen to live step updates (today's delta, not raw lifetime count)
@@ -157,6 +217,8 @@ class _DashboardScreenState extends State<DashboardScreen>
             dailyGoal: _stepGoal?.dailySteps ?? 7000,
             todaySteps: steps,
           );
+          await _updateTodayStreakStatus(steps, _stepGoal?.dailySteps ?? 7000);
+          await _loadDailyGoalsMet();
 
           // Handle notifications
           final goalSteps = _stepGoal?.dailySteps ?? 7000;
@@ -175,7 +237,6 @@ class _DashboardScreenState extends State<DashboardScreen>
           // Send notification when goal is completed
           if (steps >= goalSteps && goalSteps > 0) {
             await _notificationService.sendGoalCompletedNotification();
-            await _loadDailyGoalsMet(); // Update streak
           }
         }
       });

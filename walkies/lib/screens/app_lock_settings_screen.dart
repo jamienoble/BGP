@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:device_apps/device_apps.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkies/services/app_locker_service.dart';
 import 'package:walkies/services/supabase_service.dart';
 
@@ -39,6 +42,16 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
     if (state == AppLifecycleState.resumed) {
       _loadData();
     }
+  }
+
+  Future<void> _resetStreak() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('streak_days_met_v1', jsonEncode(<String, bool>{}));
+    await prefs.setInt('streak_current_v1', 0);
+    await prefs.setString(
+      'streak_reset_date_v1',
+      DateTime.now().toIso8601String().split('T')[0],
+    );
   }
 
   Future<void> _loadData() async {
@@ -134,6 +147,14 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
           (lock) => lock.appPackageName == packageName,
         );
         await _appLockerService.unlockApp(appLock.id);
+        await _resetStreak();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('App unlocked. Your streak has been reset.'),
+            ),
+          );
+        }
       } else {
         final appName = app.appName;
         await _appLockerService.lockApp(packageName, appName);
