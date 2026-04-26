@@ -123,6 +123,37 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final hasConnection = await _networkService.hasInternetConnection();
+      if (!hasConnection) {
+        setState(() {
+          _errorMessage =
+              'No internet connection. Please check your network and try again.';
+        });
+        return;
+      }
+
+      await _supabaseService.signInWithGoogle();
+      // Session is resolved via Supabase auth state stream in _AuthWrapper.
+    } catch (e) {
+      setState(() {
+        _errorMessage = _friendlyAuthError(e);
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -188,6 +219,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _isLoading ? null : _handleGoogleSignIn,
+                icon: const Icon(Icons.account_circle_outlined),
+                label: const Text('Continue with Google'),
+              ),
             ),
           ],
         ),

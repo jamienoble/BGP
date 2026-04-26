@@ -128,6 +128,30 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
     final packageName = app.packageName;
     final isCurrentlyLocked = _lockedAppIds?.contains(packageName) ?? false;
     if (_savingPackages.contains(packageName)) return;
+    if (isCurrentlyLocked) {
+      final shouldUnlock = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Reset streak?'),
+          content: Text(
+            'Unlocking ${app.appName} will reset your streak to 0. Continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      if (shouldUnlock != true) {
+        return;
+      }
+    }
 
     setState(() {
       _savingPackages.add(packageName);

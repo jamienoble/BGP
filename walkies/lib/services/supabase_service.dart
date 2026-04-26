@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walkies/models/app_lock.dart';
 import 'package:walkies/models/daily_steps.dart';
@@ -77,6 +78,14 @@ class SupabaseService {
     return await _retryWithBackoff(
       () => client.auth.signInWithPassword(email: email, password: password),
       operationName: 'Sign in',
+    );
+  }
+
+  Future<bool> signInWithGoogle() async {
+    return client.auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: kIsWeb ? null : 'com.example.walkies://login-callback',
+      authScreenLaunchMode: LaunchMode.externalApplication,
     );
   }
 
