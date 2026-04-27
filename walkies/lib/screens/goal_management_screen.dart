@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkies/services/supabase_service.dart';
+import 'package:walkies/constants/app_constants.dart';
+import 'package:walkies/utils/date_utils.dart' as date_utils;
 
 class GoalManagementScreen extends StatefulWidget {
   const GoalManagementScreen({Key? key}) : super(key: key);
@@ -29,7 +31,7 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
     try {
       final goal = await _supabaseService.getStepGoal();
       setState(() {
-        _currentGoal = goal?.dailySteps ?? 5000;
+        _currentGoal = goal?.dailySteps ?? AppConstants.defaultDailyStepGoal;
         _goalController.text = _currentGoal.toString();
         _isLoading = false;
       });
@@ -45,11 +47,11 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
 
   Future<void> _resetStreak() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('streak_days_met_v1', jsonEncode(<String, bool>{}));
-    await prefs.setInt('streak_current_v1', 0);
+    await prefs.setString(AppConstants.prefStreakDaysMet, jsonEncode(<String, bool>{}));
+    await prefs.setInt(AppConstants.prefStreakCurrent, 0);
     await prefs.setString(
-      'streak_reset_date_v1',
-      DateTime.now().toIso8601String().split('T')[0],
+      AppConstants.prefStreakResetDate,
+      date_utils.DateUtils.todayDateString(),
     );
   }
 
@@ -61,7 +63,7 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
     try {
       await _supabaseService.createOrUpdateStepGoal(newGoal);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('daily_goal', newGoal);
+      await prefs.setInt(AppConstants.prefDailyGoal, newGoal);
       if (resetStreak) {
         await _resetStreak();
       }

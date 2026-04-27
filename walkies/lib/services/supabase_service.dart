@@ -5,14 +5,11 @@ import 'package:walkies/models/daily_steps.dart';
 import 'package:walkies/models/step_goal.dart';
 import 'package:walkies/models/user.dart';
 import 'package:walkies/services/network_service.dart';
+import 'package:walkies/constants/app_constants.dart';
 
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
   final NetworkService _networkService = NetworkService();
-
-  // Retry configuration
-  static const int _maxRetries = 3;
-  static const Duration _initialRetryDelay = Duration(milliseconds: 500);
 
   factory SupabaseService() {
     return _instance;
@@ -43,16 +40,17 @@ class SupabaseService {
         retryCount++;
 
         // If we've exhausted retries, rethrow
-        if (retryCount >= _maxRetries) {
+        if (retryCount >= AppConstants.maxRetries) {
           rethrow;
         }
 
         // Calculate exponential backoff: 500ms, 1s, 2s, etc.
-        final delay = _initialRetryDelay * (1 << (retryCount - 1));
+        final delay =
+            AppConstants.retryInitialDelay * (1 << (retryCount - 1));
 
         print(
           'Network error in $operationName. Retrying in ${delay.inMilliseconds}ms... '
-          '(Attempt $retryCount/$_maxRetries)',
+          '(Attempt $retryCount/${AppConstants.maxRetries})',
         );
 
         await Future.delayed(delay);
@@ -84,7 +82,7 @@ class SupabaseService {
   Future<bool> signInWithGoogle() async {
     return client.auth.signInWithOAuth(
       OAuthProvider.google,
-      redirectTo: kIsWeb ? null : 'com.example.walkies://login-callback',
+      redirectTo: kIsWeb ? null : AppConstants.deepLinkCallbackUrl,
       authScreenLaunchMode: LaunchMode.externalApplication,
     );
   }

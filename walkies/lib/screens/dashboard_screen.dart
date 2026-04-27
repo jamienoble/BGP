@@ -11,6 +11,8 @@ import 'package:walkies/services/app_locker_service.dart';
 import 'package:walkies/screens/goal_management_screen.dart';
 import 'package:walkies/screens/app_lock_settings_screen.dart';
 import 'package:walkies/widgets/weekly_streak_widget.dart';
+import 'package:walkies/constants/app_constants.dart';
+import 'package:walkies/utils/date_utils.dart' as date_utils;
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -21,10 +23,6 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen>
     with WidgetsBindingObserver {
-  static const String _streakDaysMetKey = 'streak_days_met_v1';
-  static const String _streakCurrentKey = 'streak_current_v1';
-  static const String _streakResetDateKey = 'streak_reset_date_v1';
-
   final _supabaseService = SupabaseService();
   final _stepTrackingService = StepTrackingService();
   final _notificationService = NotificationService();
@@ -62,6 +60,18 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
+  /// Reset the notification flag if it's a new day
+  Future<void> _resetNotificationFlagIfNewDay() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = date_utils.DateUtils.todayDateString();
+    final lastResetDate = prefs.getString(AppConstants.prefLastNotificationResetDate);
+
+    if (lastResetDate != today) {
+      _goalNotificationSent = false;
+      await prefs.setString(AppConstants.prefLastNotificationResetDate, today);
+    }
+  }
+
   /// Initialize notification service and load daily streak data
   Future<void> _initializeNotifications() async {
     try {
@@ -73,11 +83,32 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  String _dateKey(DateTime date) =>
-      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  /// Handle step update notifications based on progress towards goal
+  Future<void> _handleStepUpdateNotifications(int currentSteps, int goalSteps) async {
+    if (goalSteps <= 0) return;
+
+    final progress = (currentSteps / goalSteps) * 100;
+
+    // Send notification when reaching ~80% of goal
+    if (progress >= AppConstants.notificationThresholdPercent && !_goalNotificationSent) {
+      _goalNotificationSent = true;
+      await _notificationService.sendGoalNearCompletionNotification(
+        currentSteps: currentSteps,
+        goalSteps: goalSteps,
+        stepsRemaining: (goalSteps - currentSteps).clamp(0, goalSteps),
+      );
+    }
+
+    // Send notification when goal is completed
+    if (currentSteps >= goalSteps) {
+      await _notificationService.sendGoalCompletedNotification();
+    }
+  }
+
+  String _dateKey(DateTime date) => date_utils.DateUtils.todayDateString(dateTime: date);
 
   Future<Map<String, bool>> _readStreakMap(SharedPreferences prefs) async {
-    final raw = prefs.getString(_streakDaysMetKey);
+    final raw = prefs.getString(AppConstants.prefStreakDaysMet);
     if (raw == null || raw.isEmpty) return <String, bool>{};
     try {
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
@@ -91,7 +122,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     SharedPreferences prefs,
     Map<String, bool> streakMap,
   ) async {
-    await prefs.setString(_streakDaysMetKey, jsonEncode(streakMap));
+    await prefs.setString(AppConstants.prefStreakDaysMet, jsonEncode(streakMap));
   }
 
   Future<void> _updateTodayStreakStatus(int steps, int goalSteps) async {
@@ -100,13 +131,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     final streakMap = await _readStreakMap(prefs);
     final today = DateTime.now();
     final todayKey = _dateKey(today);
-    final resetDate = prefs.getString(_streakResetDateKey);
+    final resetDate = prefs.getString(AppConstants.prefStreakResetDate);
     final wasResetToday = resetDate == todayKey;
 
     streakMap[todayKey] = !wasResetToday && steps >= goalSteps;
 
     // Keep only recent entries
-    final cutoff = today.subtract(const Duration(days: 35));
+    final cutoff = today.subtract(Duration(days: AppConstants.dayHistoryLimit));
     streakMap.removeWhere((k, _) {
       final parsed = DateTime.tryParse(k);
       if (parsed == null) return true;
@@ -141,7 +172,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
         // Get daily steps for this date
         final dailySteps = await _supabaseService.getTodayStepsForDate(dateStr);
-        final stepGoal = _stepGoal?.dailySteps ?? 7000;
+        final stepGoal = _stepGoal?.dailySteps ?? AppConstants.defaultDailyStepGoal;
 
         goalsMet[DateTime(date.year, date.month, date.day)] =
             (dailySteps?.steps ?? 0) >= stepGoal;
@@ -160,7 +191,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         }
       }
       await _writeStreakMap(prefs, streakMap);
-      await prefs.setInt(_streakCurrentKey, streak);
+      await prefs.setInt(AppConstants.prefStreakCurrent, streak);
 
       if (mounted) {
         setState(() {
@@ -175,6 +206,9 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<void> _loadData() async {
     try {
+      // Reset notification flag if it's a new day
+      await _resetNotificationFlagIfNewDay();
+
       // Initialize step tracking (requests permission internally if needed)
       await _stepTrackingService.initialize();
 
@@ -192,13 +226,13 @@ class _DashboardScreenState extends State<DashboardScreen>
         });
         // Persist goal and steps to prefs for accessibility service
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setInt('daily_goal', goal?.dailySteps ?? 7000);
-        await prefs.setInt('today_steps', _currentSteps);
+        await prefs.setInt(AppConstants.prefDailyGoal, goal?.dailySteps ?? AppConstants.defaultDailyStepGoal);
+        await prefs.setInt(AppConstants.prefTodaySteps, _currentSteps);
         await _appLockerService.syncNativeStepGoalPrefs(
-          dailyGoal: goal?.dailySteps ?? 7000,
+          dailyGoal: goal?.dailySteps ?? AppConstants.defaultDailyStepGoal,
           todaySteps: _currentSteps,
         );
-        await _updateTodayStreakStatus(_currentSteps, goal?.dailySteps ?? 7000);
+        await _updateTodayStreakStatus(_currentSteps, goal?.dailySteps ?? AppConstants.defaultDailyStepGoal);
         await _loadDailyGoalsMet();
       }
 
@@ -212,32 +246,18 @@ class _DashboardScreenState extends State<DashboardScreen>
           });
           // Persist to prefs for accessibility service
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setInt('today_steps', steps);
+          await prefs.setInt(AppConstants.prefTodaySteps, steps);
+          final dailyGoal =
+              _stepGoal?.dailySteps ?? AppConstants.defaultDailyStepGoal;
           await _appLockerService.syncNativeStepGoalPrefs(
-            dailyGoal: _stepGoal?.dailySteps ?? 7000,
+            dailyGoal: dailyGoal,
             todaySteps: steps,
           );
-          await _updateTodayStreakStatus(steps, _stepGoal?.dailySteps ?? 7000);
+          await _updateTodayStreakStatus(steps, dailyGoal);
           await _loadDailyGoalsMet();
 
           // Handle notifications
-          final goalSteps = _stepGoal?.dailySteps ?? 7000;
-          final progress = (steps / goalSteps) * 100;
-
-          // Send notification when reaching ~80% of goal
-          if (progress >= 80 && !_goalNotificationSent && goalSteps > 0) {
-            _goalNotificationSent = true;
-            await _notificationService.sendGoalNearCompletionNotification(
-              currentSteps: steps,
-              goalSteps: goalSteps,
-              stepsRemaining: (goalSteps - steps).clamp(0, goalSteps),
-            );
-          }
-
-          // Send notification when goal is completed
-          if (steps >= goalSteps && goalSteps > 0) {
-            await _notificationService.sendGoalCompletedNotification();
-          }
+          await _handleStepUpdateNotifications(steps, dailyGoal);
         }
       });
     } catch (e) {

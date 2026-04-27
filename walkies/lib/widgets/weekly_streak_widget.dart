@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:walkies/utils/date_utils.dart' as date_utils;
 
 /// Widget to display weekly streak with day indicators
 /// Shows M, T, W, T, F, S, S for the current week
@@ -85,23 +86,9 @@ class WeeklyStreakWidget extends StatelessWidget {
     );
   }
 
-  List<DateTime> _getWeekDays() {
-    final now = DateTime.now();
-    // Get Monday of current week (0 = Monday, 6 = Sunday)
-    final monday = now.subtract(Duration(days: now.weekday - 1));
+  List<DateTime> _getWeekDays() => date_utils.DateUtils.getCurrentWeekDays();
 
-    return List.generate(
-      7,
-      (index) => DateTime(monday.year, monday.month, monday.day + index),
-    );
-  }
-
-  bool _isToday(DateTime date) {
-    final now = DateTime.now();
-    return date.year == now.year &&
-        date.month == now.month &&
-        date.day == now.day;
-  }
+  bool _isToday(DateTime date) => date_utils.DateUtils.isToday(date);
 }
 
 /// Individual day streak indicator
