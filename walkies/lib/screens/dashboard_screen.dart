@@ -8,7 +8,6 @@ import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/services/permissions_service.dart';
 import 'package:walkies/services/notification_service.dart';
 import 'package:walkies/services/app_locker_service.dart';
-import 'package:walkies/screens/goal_management_screen.dart';
 import 'package:walkies/screens/app_lock_settings_screen.dart';
 import 'package:walkies/widgets/weekly_streak_widget.dart';
 import 'package:walkies/constants/app_constants.dart';
@@ -269,19 +268,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  Future<void> _signOut() async {
-    try {
-      await _supabaseService.signOut();
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/login');
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -295,9 +281,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Walkies Dashboard'),
-        actions: [
-          IconButton(icon: const Icon(Icons.logout), onPressed: _signOut),
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -440,24 +423,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
             const SizedBox(height: 16),
 
-            // Goal Management
-            Card(
-              elevation: 4,
-              child: ListTile(
-                title: const Text('Daily Goal'),
-                subtitle: Text('${goalSteps} steps'),
-                trailing: const Icon(Icons.arrow_forward),
-                onTap: () {
-                  Navigator.of(context)
-                      .push(
-                        MaterialPageRoute(
-                          builder: (context) => const GoalManagementScreen(),
-                        ),
-                      )
-                      .then((_) => _loadData());
-                },
-              ),
-            ),
+            // Goal Management - moved to settings
           ],
         ),
       ),

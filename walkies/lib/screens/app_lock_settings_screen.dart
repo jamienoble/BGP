@@ -1,10 +1,8 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:device_apps/device_apps.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkies/services/app_locker_service.dart';
 import 'package:walkies/services/supabase_service.dart';
+import 'package:walkies/constants/app_constants.dart';
 
 class AppLockSettingsScreen extends StatefulWidget {
   const AppLockSettingsScreen({Key? key}) : super(key: key);
@@ -44,16 +42,6 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
     }
   }
 
-  Future<void> _resetStreak() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('streak_days_met_v1', jsonEncode(<String, bool>{}));
-    await prefs.setInt('streak_current_v1', 0);
-    await prefs.setString(
-      'streak_reset_date_v1',
-      DateTime.now().toIso8601String().split('T')[0],
-    );
-  }
-
   Future<void> _loadData() async {
     try {
       // Only load social media apps instead of all apps
@@ -65,7 +53,7 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
       final todaySteps = await _supabaseService.getTodaySteps();
 
       await _appLockerService.syncNativeStepGoalPrefs(
-        dailyGoal: stepGoal?.dailySteps ?? 7000,
+        dailyGoal: stepGoal?.dailySteps ?? AppConstants.defaultDailyStepGoal,
         todaySteps: todaySteps?.steps ?? 0,
       );
       await _appLockerService.syncLockedAppsToAccessibilityService();
@@ -128,30 +116,6 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
     final packageName = app.packageName;
     final isCurrentlyLocked = _lockedAppIds?.contains(packageName) ?? false;
     if (_savingPackages.contains(packageName)) return;
-    if (isCurrentlyLocked) {
-      final shouldUnlock = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Reset streak?'),
-          content: Text(
-            'Unlocking ${app.appName} will reset your streak to 0. Continue?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Continue'),
-            ),
-          ],
-        ),
-      );
-      if (shouldUnlock != true) {
-        return;
-      }
-    }
 
     setState(() {
       _savingPackages.add(packageName);
@@ -171,7 +135,6 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
           (lock) => lock.appPackageName == packageName,
         );
         await _appLockerService.unlockApp(appLock.id);
-        await _resetStreak();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

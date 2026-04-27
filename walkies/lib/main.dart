@@ -5,6 +5,9 @@ import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/screens/login_screen.dart';
 import 'package:walkies/screens/dashboard_screen.dart';
+import 'package:walkies/screens/settings_screen.dart';
+import 'package:walkies/screens/education_screen.dart';
+import 'package:walkies/screens/community_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,7 +41,7 @@ class MyApp extends StatelessWidget {
         home: const _AuthWrapper(),
         routes: {
           '/login': (_) => const LoginScreen(),
-          '/dashboard': (_) => const DashboardScreen(),
+          '/app_locks': (_) => const AppLockSettingsScreen(),
         },
       ),
     );
@@ -62,11 +65,79 @@ class _AuthWrapper extends StatelessWidget {
         }
 
         if (snapshot.hasData && snapshot.data?.session != null) {
-          return const DashboardScreen();
+          return const MainTabNavigator();
         }
 
         return const LoginScreen();
       },
+    );
+  }
+}
+
+class MainTabNavigator extends StatefulWidget {
+  const MainTabNavigator({Key? key}) : super(key: key);
+
+  @override
+  State<MainTabNavigator> createState() => _MainTabNavigatorState();
+}
+
+class _MainTabNavigatorState extends State<MainTabNavigator> {
+  int _currentIndex = 0;
+
+  final List<Widget> _screens = [
+    const DashboardScreen(),
+    const EducationScreen(),
+    const CommunityScreen(),
+  ];
+
+  final List<String> _titles = [
+    'Walkies Dashboard',
+    'Education',
+    'Community',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_titles[_currentIndex]),
+        actions: [
+          if (_currentIndex == 0)
+            IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const SettingsScreen(),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+      body: _screens[_currentIndex],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (int index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.school),
+            label: 'Education',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people),
+            label: 'Community',
+          ),
+        ],
+      ),
     );
   }
 }
