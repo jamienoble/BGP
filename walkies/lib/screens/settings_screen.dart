@@ -10,6 +10,87 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final _supabaseService = SupabaseService();
+  String? _preferredName;
+  bool _isSavingName = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferredName();
+  }
+
+  Future<void> _loadPreferredName() async {
+    try {
+      await _supabaseService.ensureUserProfile();
+      final name = await _supabaseService.getPreferredName();
+      if (!mounted) return;
+      setState(() {
+        _preferredName = name;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _editPreferredName() async {
+    final controller = TextEditingController(text: _preferredName ?? '');
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Preferred name'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Enter your preferred name',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (newName == null) return;
+    if (newName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Name cannot be empty.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSavingName = true;
+    });
+    try {
+      await _supabaseService.upsertPreferredName(newName);
+      if (!mounted) return;
+      setState(() {
+        _preferredName = newName;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Preferred name updated.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update name. Please try again.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingName = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -47,6 +128,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
           ),
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            child: ListTile(
+              title: const Text('Preferred Name'),
+              subtitle: Text(_preferredName ?? 'Set your display name'),
+              trailing: _isSavingName
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.chevron_right),
+              onTap: _isSavingName ? null : _editPreferredName,
+            ),
+          ),
 
           const SizedBox(height: 24),
 
@@ -71,9 +167,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               leading: const Icon(Icons.logout, color: Colors.red),
               titleTextStyle: const TextStyle(color: Colors.red),
               onTap: () async {
-                final supabaseService = SupabaseService();
                 try {
-                  await supabaseService.signOut();
+                  await _supabaseService.signOut();
                   if (mounted) {
                     Navigator.of(context).pushReplacementNamed('/login');
                   }

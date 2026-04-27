@@ -5,6 +5,7 @@ import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/screens/login_screen.dart';
 import 'package:walkies/screens/dashboard_screen.dart';
+import 'package:walkies/screens/app_lock_settings_screen.dart';
 import 'package:walkies/screens/settings_screen.dart';
 import 'package:walkies/screens/education_screen.dart';
 import 'package:walkies/screens/community_screen.dart';

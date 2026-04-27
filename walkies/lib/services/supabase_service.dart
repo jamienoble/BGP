@@ -65,9 +65,19 @@ class SupabaseService {
     return AppUser.fromSupabaseAuth(user);
   }
 
-  Future<AuthResponse> signUp(String email, String password) async {
+  Future<AuthResponse> signUp(
+    String email,
+    String password, {
+    String? preferredName,
+  }) async {
     return await _retryWithBackoff(
-      () => client.auth.signUp(email: email, password: password),
+      () => client.auth.signUp(
+        email: email,
+        password: password,
+        data: preferredName == null || preferredName.trim().isEmpty
+            ? null
+            : {'preferred_name': preferredName.trim()},
+      ),
       operationName: 'Sign up',
     );
   }
@@ -89,6 +99,68 @@ class SupabaseService {
 
   Future<void> signOut() async {
     await client.auth.signOut();
+  }
+
+  Future<String?> getPreferredName() async {
+    final userId = currentUserId;
+    if (userId == null) return null;
+
+    final response = await client
+        .from('user_profiles')
+        .select('preferred_name')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+    final dbValue = response?['preferred_name'] as String?;
+    if (dbValue != null && dbValue.trim().isNotEmpty) {
+      return dbValue.trim();
+    }
+
+    final metadataValue =
+        client.auth.currentUser?.userMetadata?['preferred_name'] as String?;
+    if (metadataValue != null && metadataValue.trim().isNotEmpty) {
+      return metadataValue.trim();
+    }
+
+    return null;
+  }
+
+  Future<void> upsertPreferredName(String preferredName) async {
+    final userId = currentUserId;
+    if (userId == null) throw Exception('User not authenticated');
+
+    final cleaned = preferredName.trim();
+    if (cleaned.isEmpty) throw Exception('Preferred name cannot be empty');
+
+    await client.from('user_profiles').upsert({
+      'user_id': userId,
+      'preferred_name': cleaned,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, onConflict: 'user_id');
+  }
+
+  Future<void> ensureUserProfile() async {
+    final userId = currentUserId;
+    if (userId == null) return;
+
+    final existing = await client
+        .from('user_profiles')
+        .select('user_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+    if (existing != null) return;
+
+    final metadataName =
+        client.auth.currentUser?.userMetadata?['preferred_name'] as String?;
+    final fallbackName =
+        (metadataName != null && metadataName.trim().isNotEmpty)
+            ? metadataName.trim()
+            : null;
+
+    await client.from('user_profiles').insert({
+      'user_id': userId,
+      'preferred_name': fallbackName,
+    });
   }
 
   // ==================== Step Goals ====================

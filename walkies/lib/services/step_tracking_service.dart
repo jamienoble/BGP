@@ -35,8 +35,11 @@ class StepTrackingService {
   final PermissionsService _permissionsService = PermissionsService();
 
   Future<void> initialize() async {
-    // Prevent multiple initialization attempts
-    if (_isInitialized) return;
+    // If already initialized, still refresh day-boundary state.
+    if (_isInitialized) {
+      await refreshForToday();
+      return;
+    }
 
     try {
       // Check permission first (don't request — let the UI handle requesting
@@ -79,9 +82,32 @@ class StepTrackingService {
       );
 
       _isInitialized = true;
+      await refreshForToday();
     } catch (e) {
       _initializationError = '${AppConstants.errorInitializationFailed}: $e';
     }
+  }
+
+  /// Ensure daily counters reset even if no sensor event arrived yet.
+  Future<void> refreshForToday() async {
+    final prefs = await SharedPreferences.getInstance();
+    final todayDate = date_utils.DateUtils.todayDateString();
+    final savedDate = prefs.getString(AppConstants.prefStepBaselineDate) ?? '';
+
+    if (savedDate == todayDate) {
+      // Same day: restore cached value to keep UI in sync after app relaunch.
+      _todaySteps = prefs.getInt(AppConstants.prefTodaySteps) ?? 0;
+      _todayStepsController.add(_todaySteps);
+      return;
+    }
+
+    // New day: reset immediate UI/state to zero while waiting for first sensor event.
+    _todaySteps = 0;
+    _baselineDate = '';
+    _pedometerBaseline = 0;
+    await prefs.setInt(AppConstants.prefTodaySteps, 0);
+    _todayStepsController.add(0);
+    await _syncToSupabase();
   }
 
   void _onStepCount(StepCount event) async {

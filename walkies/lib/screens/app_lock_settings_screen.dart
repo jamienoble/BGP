@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:device_apps/device_apps.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkies/services/app_locker_service.dart';
 import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/constants/app_constants.dart';
+import 'dart:convert';
+import 'package:walkies/utils/date_utils.dart' as date_utils;
 
 class AppLockSettingsScreen extends StatefulWidget {
   const AppLockSettingsScreen({Key? key}) : super(key: key);
@@ -78,6 +81,16 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
     }
   }
 
+  Future<void> _resetStreak() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(AppConstants.prefStreakDaysMet, jsonEncode(<String, bool>{}));
+    await prefs.setInt(AppConstants.prefStreakCurrent, 0);
+    await prefs.setString(
+      AppConstants.prefStreakResetDate,
+      date_utils.DateUtils.todayDateString(),
+    );
+  }
+
   Future<void> _toggleAppLock(Application app) async {
     // First check if accessibility service is enabled
     if (!_isAccessibilityServiceEnabled) {
@@ -116,6 +129,30 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
     final packageName = app.packageName;
     final isCurrentlyLocked = _lockedAppIds?.contains(packageName) ?? false;
     if (_savingPackages.contains(packageName)) return;
+    if (isCurrentlyLocked) {
+      final shouldUnlock = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Reset streak?'),
+          content: Text(
+            'Unlocking ${app.appName} will reset your streak to 0. Continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      if (shouldUnlock != true) {
+        return;
+      }
+    }
 
     setState(() {
       _savingPackages.add(packageName);
@@ -135,6 +172,7 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
           (lock) => lock.appPackageName == packageName,
         );
         await _appLockerService.unlockApp(appLock.id);
+        await _resetStreak();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
