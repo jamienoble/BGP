@@ -271,21 +271,17 @@ class _DashboardScreenState extends State<DashboardScreen>
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Center(child: CircularProgressIndicator());
     }
 
     final goalSteps = _stepGoal?.dailySteps ?? 0;
     final progress = goalSteps > 0 ? _currentSteps / goalSteps : 0.0;
     final goalMet = _currentSteps >= goalSteps;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Walkies Dashboard'),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
             // Permission warning if step tracking failed
             if (_stepTrackingService.initializationError != null)
               Container(
@@ -423,9 +419,8 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
             const SizedBox(height: 16),
 
-            // Goal Management - moved to settings
-          ],
-        ),
+          // Goal Management - moved to settings
+        ],
       ),
     );
   }

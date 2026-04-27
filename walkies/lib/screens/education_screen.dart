@@ -5,15 +5,10 @@ class EducationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Education'),
-      ),
-      body: const Center(
-        child: Text(
-          'Education content coming soon...',
-          style: TextStyle(fontSize: 18),
-        ),
+    return const Center(
+      child: Text(
+        'Education content coming soon...',
+        style: TextStyle(fontSize: 18),
       ),
     );
   }

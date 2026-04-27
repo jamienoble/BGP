@@ -5,15 +5,10 @@ class CommunityScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Community'),
-      ),
-      body: const Center(
-        child: Text(
-          'Community content coming soon...',
-          style: TextStyle(fontSize: 18),
-        ),
+    return const Center(
+      child: Text(
+        'Community content coming soon...',
+        style: TextStyle(fontSize: 18),
       ),
     );
   }
