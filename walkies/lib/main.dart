@@ -36,8 +36,11 @@ class MyApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Walkies - App Locker',
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF2D5A4A), // Forest green
+          ),
           useMaterial3: true,
+          scaffoldBackgroundColor: const Color(0xFFFFF8F0), // Warm cream
         ),
         home: const _AuthWrapper(),
         routes: {

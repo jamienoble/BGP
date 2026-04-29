@@ -69,6 +69,8 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     if (lastResetDate != today) {
       _goalNotificationSent = false;
+      // Reset the blocked app opened flag for the new day
+      await prefs.setBool(AppConstants.prefBlockedAppOpenedBeforeGoal, false);
       await prefs.setString(AppConstants.prefLastNotificationResetDate, today);
     }
   }
@@ -134,8 +136,15 @@ class _DashboardScreenState extends State<DashboardScreen>
     final todayKey = _dateKey(today);
     final resetDate = prefs.getString(AppConstants.prefStreakResetDate);
     final wasResetToday = resetDate == todayKey;
-
-    streakMap[todayKey] = !wasResetToday && steps >= goalSteps;
+    
+    // Check if a blocked app was opened before reaching the goal
+    final blockedAppOpenedBeforeGoal = prefs.getBool(AppConstants.prefBlockedAppOpenedBeforeGoal) ?? false;
+    
+    // Only count today as streak success if:
+    // 1. Not reset today
+    // 2. Goal is met
+    // 3. No blocked apps were opened before goal was met
+    streakMap[todayKey] = !wasResetToday && steps >= goalSteps && !blockedAppOpenedBeforeGoal;
 
     // Keep only recent entries
     final cutoff = today.subtract(Duration(days: AppConstants.dayHistoryLimit));
@@ -289,9 +298,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     final goalMet = _currentSteps >= goalSteps;
     final stepsRemaining = (goalSteps - _currentSteps).clamp(0, goalSteps);
     final stepDigits = _currentSteps
-        .clamp(0, 9999)
+        .clamp(0, 99999)
         .toString()
-        .padLeft(4, '0')
+        .padLeft(5, '0')
         .split('');
     final distanceKm = (_currentSteps * 0.0008);
     final greetingName = _preferredName ?? _userDisplayName();
@@ -314,7 +323,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               goalMet
                   ? 'Goal complete - your apps are unlocked'
                   : '$stepsRemaining steps until you unlock',
-              style: TextStyle(fontSize: 16, color: Colors.grey[700]),
+              style: TextStyle(fontSize: 16, color: const Color(0xFF5D7B6D)),
             ),
           ),
           const SizedBox(height: 18),
@@ -322,8 +331,9 @@ class _DashboardScreenState extends State<DashboardScreen>
             elevation: 1,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
-              side: BorderSide(color: Colors.grey.shade200),
+              side: BorderSide(color: const Color(0xFFE8D7C3)),
             ),
+            color: Colors.white,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -340,9 +350,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                           child: Container(
                             height: 116,
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
+                              color: const Color(0xFFF5EFE5),
                               borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: Colors.grey.shade300),
+                              border: Border.all(color: const Color(0xFFE8D7C3)),
                             ),
                             child: Column(
                               children: [
@@ -353,7 +363,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                       ((int.parse(digit) + 9) % 10).toString(),
                                       style: TextStyle(
                                         fontSize: 11,
-                                        color: Colors.grey.shade500,
+                                        color: const Color(0xFF8BA39E),
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -362,7 +372,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 Divider(
                                   height: 1,
                                   thickness: 1,
-                                  color: Colors.grey.shade300,
+                                  color: const Color(0xFFE8D7C3),
                                 ),
                                 Expanded(
                                   flex: 5,
@@ -370,10 +380,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                                     child: Text(
                                       digit,
                                       style: const TextStyle(
-                                        fontSize: 46,
+                                        fontSize: 40,
                                         height: 1.0,
                                         fontWeight: FontWeight.w700,
-                                        color: Colors.deepPurple,
+                                        color: Color(0xFF2D5A4A),
                                       ),
                                     ),
                                   ),
@@ -381,7 +391,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 Divider(
                                   height: 1,
                                   thickness: 1,
-                                  color: Colors.grey.shade300,
+                                  color: const Color(0xFFE8D7C3),
                                 ),
                                 Expanded(
                                   flex: 2,
@@ -390,7 +400,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                       ((int.parse(digit) + 1) % 10).toString(),
                                       style: TextStyle(
                                         fontSize: 11,
-                                        color: Colors.grey.shade500,
+                                        color: const Color(0xFF8BA39E),
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -410,14 +420,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                       Text(
                         '$_currentSteps steps',
                         style: const TextStyle(
-                          color: Colors.deepPurple,
+                          color: Color(0xFF2D5A4A),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       Text(
                         '/$goalSteps',
                         style: TextStyle(
-                          color: Colors.grey[600],
+                          color: const Color(0xFF8BA39E),
                           fontWeight: FontWeight.w600,
                         ),
                       ),

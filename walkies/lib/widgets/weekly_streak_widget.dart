@@ -40,14 +40,14 @@ class WeeklyStreakWidget extends StatelessWidget {
                     vertical: 6.0,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.deepPurple[100],
+                    color: const Color(0xFFE0E8E4),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
                     children: [
                       Icon(
                         Icons.local_fire_department,
-                        color: Colors.red[600],
+                        color: const Color(0xFFD4773D),
                         size: 20,
                       ),
                       const SizedBox(width: 4),
@@ -55,7 +55,7 @@ class WeeklyStreakWidget extends StatelessWidget {
                         '$currentStreak day${currentStreak != 1 ? 's' : ''}',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.red[600],
+                          color: const Color(0xFFD4773D),
                         ),
                       ),
                     ],
@@ -116,7 +116,7 @@ class _DayStreak extends StatelessWidget {
             shape: BoxShape.circle,
             color: _getBackgroundColor(),
             border: isToday
-                ? Border.all(color: Colors.deepPurple, width: 2)
+                ? Border.all(color: const Color(0xFF2D5A4A), width: 2)
                 : null,
           ),
           child: Center(
@@ -142,18 +142,18 @@ class _DayStreak extends StatelessWidget {
 
   Color _getBackgroundColor() {
     if (goalMet) {
-      return Colors.green[600]!;
+      return const Color(0xFF7CB342); // Vibrant yellow-green for success
     }
     if (isToday) {
-      return Colors.deepPurple[100]!;
+      return const Color(0xFFE0E8E4); // Soft sage for today
     }
-    return Colors.grey[300]!;
+    return const Color(0xFFE8D7C3); // Warm cream for past days
   }
 
   Color _getTextColor() {
     if (isToday) {
-      return Colors.deepPurple;
+      return const Color(0xFF2D5A4A); // Forest green
     }
-    return Colors.grey[600]!;
+    return const Color(0xFF8BA39E); // Muted sage
   }
 }

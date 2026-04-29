@@ -174,6 +174,14 @@ class StepTrackingService {
       return false;
     }
 
+    // Reject if not enough time has passed since last step (debounce noise from hand movements)
+    if (_lastRawSteps > 0 && _lastStepEventAt != null) {
+      final elapsedMs = now.difference(_lastStepEventAt!).inMilliseconds;
+      if (elapsedMs < AppConstants.minStepIntervalMs) {
+        return false;
+      }
+    }
+
     // Reject implausible step bursts (likely sensor noise or device shaking)
     if (_lastRawSteps > 0 && _lastStepEventAt != null) {
       final deltaSteps = rawSteps - _lastRawSteps;
@@ -181,6 +189,7 @@ class StepTrackingService {
           now.difference(_lastStepEventAt!).inMilliseconds / 1000.0;
       if (elapsedSeconds > 0) {
         final stepsPerSecond = deltaSteps / elapsedSeconds;
+        // Stricter threshold: normal walking is 1.5-2.0, allow up to 2.2 for variation
         if (stepsPerSecond > AppConstants.maxStepsPerSecond) {
           return false;
         }

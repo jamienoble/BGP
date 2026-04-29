@@ -20,6 +20,8 @@ class AppBlockingAccessibilityService : AccessibilityService() {
         const val LOCKED_APPS_KEY = "locked_apps"
         private const val BLOCKED_APPS_CHANNEL_ID = "walkies_blocked_apps"
         private const val BLOCKED_APPS_CHANNEL_NAME = "Walkies App Blocking"
+        private const val STEP_PREFS_NAME = "step_prefs"
+        private const val LAST_STEP_CHECK_DATE_KEY = "last_step_check_date"
 
         /**
          * Retrieve the set of locked app package names from SharedPreferences
@@ -54,6 +56,8 @@ class AppBlockingAccessibilityService : AccessibilityService() {
             removeAppLock(packageName)
             return
         }
+        // Mark that a blocked app was opened before the goal was met
+        setBlockedAppOpenedBeforeGoal()
         mainHandler.post {
             try {
                 performGlobalAction(GLOBAL_ACTION_HOME)
@@ -94,6 +98,7 @@ class AppBlockingAccessibilityService : AccessibilityService() {
     private fun hasUserMetStepGoal(): Boolean {
         return try {
             val prefs = getSharedPreferences("step_prefs", Context.MODE_PRIVATE)
+            checkAndResetIfNewDay(prefs)
             val currentSteps = prefs.getInt("today_steps", 0)
             val dailyGoal = prefs.getInt("daily_goal", 7000)
             currentSteps >= dailyGoal
@@ -103,10 +108,33 @@ class AppBlockingAccessibilityService : AccessibilityService() {
     private fun getStepsRemaining(): Int {
         return try {
             val prefs = getSharedPreferences("step_prefs", Context.MODE_PRIVATE)
+            checkAndResetIfNewDay(prefs)
             val currentSteps = prefs.getInt("today_steps", 0)
             val dailyGoal = prefs.getInt("daily_goal", 7000)
             maxOf(0, dailyGoal - currentSteps)
         } catch (e: Exception) { 7000 }
+    }
+
+    private fun checkAndResetIfNewDay(prefs: android.content.SharedPreferences) {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        val lastCheckDate = prefs.getString(LAST_STEP_CHECK_DATE_KEY, "")
+        
+        if (lastCheckDate != today) {
+            // New day detected, reset today's step counter
+            prefs.edit()
+                .putInt("today_steps", 0)
+                .putString(LAST_STEP_CHECK_DATE_KEY, today)
+                .putBoolean("blocked_app_opened_before_goal", false)
+                .apply()
+            android.util.Log.i("AppBlocker", "New day detected. Reset step counter. Today: $today, Last: $lastCheckDate")
+        }
+    }
+
+    private fun setBlockedAppOpenedBeforeGoal() {
+        try {
+            val prefs = getSharedPreferences("step_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putBoolean("blocked_app_opened_before_goal", true).apply()
+        } catch (e: Exception) {}
     }
 
     private fun removeAppLock(packageName: String) {
