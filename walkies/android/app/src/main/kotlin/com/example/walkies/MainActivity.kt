@@ -36,9 +36,14 @@ class MainActivity : FlutterActivity() {
             val dailyGoal = call.argument<Int>("dailyGoal") ?: 7000
             val todaySteps = call.argument<Int>("todaySteps") ?: 0
             val prefs = getSharedPreferences("step_prefs", Context.MODE_PRIVATE)
+            
+            // Get current date and update the day marker to ensure consistency
+            val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+            
             prefs.edit()
               .putInt("daily_goal", dailyGoal)
               .putInt("today_steps", todaySteps)
+              .putString("last_step_check_date", today)
               .apply()
             result.success(true)
           }

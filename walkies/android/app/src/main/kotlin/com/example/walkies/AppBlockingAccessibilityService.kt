@@ -91,6 +91,11 @@ class AppBlockingAccessibilityService : AccessibilityService() {
             flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         }
         serviceInfo = info
+        
+        // Check for day boundary on service startup to ensure fresh data
+        val prefs = getSharedPreferences("step_prefs", Context.MODE_PRIVATE)
+        checkAndResetIfNewDay(prefs)
+        
         android.util.Log.i("AppBlocker", "Service Started")
         showToastLong("Walkies App Locker Active")
     }
