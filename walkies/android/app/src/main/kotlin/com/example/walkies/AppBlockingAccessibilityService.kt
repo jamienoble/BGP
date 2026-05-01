@@ -13,6 +13,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 class AppBlockingAccessibilityService : AccessibilityService() {
     companion object {
@@ -121,17 +124,22 @@ class AppBlockingAccessibilityService : AccessibilityService() {
     }
 
     private fun checkAndResetIfNewDay(prefs: android.content.SharedPreferences) {
-        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        // Get timezone from prefs (set by Flutter app) or use system timezone
+        val timezoneId = prefs.getString("user_timezone", ZoneId.systemDefault().id) ?: ZoneId.systemDefault().id
+        val zoneId = ZoneId.of(timezoneId)
+        
+        // Get today's date in the user's timezone
+        val today = LocalDate.now(zoneId).toString() // Format: yyyy-MM-dd
         val lastCheckDate = prefs.getString(LAST_STEP_CHECK_DATE_KEY, "")
         
         if (lastCheckDate != today) {
-            // New day detected, reset today's step counter
+            // New day detected (in user's timezone), reset today's step counter
             prefs.edit()
                 .putInt("today_steps", 0)
                 .putString(LAST_STEP_CHECK_DATE_KEY, today)
                 .putBoolean("blocked_app_opened_before_goal", false)
                 .apply()
-            android.util.Log.i("AppBlocker", "New day detected. Reset step counter. Today: $today, Last: $lastCheckDate")
+            android.util.Log.i("AppBlocker", "New day detected (TZ: $timezoneId). Reset step counter. Today: $today, Last: $lastCheckDate")
         }
     }
 

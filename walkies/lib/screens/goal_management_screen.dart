@@ -133,6 +133,28 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
       return;
     }
 
+    // Check if goal is being increased
+    final isGoalIncreased = _currentGoal != null && newGoal > _currentGoal!;
+    if (isGoalIncreased) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Goal Change Notice'),
+          content: const Text(
+            'Your increased goal will take effect tomorrow. '
+            'Any locked apps will remain unlocked for the rest of today. '
+            'The new goal will apply starting at midnight.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Got it'),
+            ),
+          ],
+        ),
+      );
+    }
+
     await _persistGoal(newGoal, resetStreak: false);
   }
 

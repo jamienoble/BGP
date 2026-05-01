@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/services/step_tracking_service.dart';
+import 'package:walkies/services/app_locker_service.dart';
 import 'package:walkies/screens/login_screen.dart';
 import 'package:walkies/screens/dashboard_screen.dart';
 import 'package:walkies/screens/app_lock_settings_screen.dart';
@@ -19,6 +20,19 @@ Future<void> main() async {
     url: 'https://cbanimdilwtfmouyfumr.supabase.co', // e.g., 'https://xyzabc.supabase.co'
     anonKey: 'sb_publishable_6a52AMpgt5KIdS3KcGzEcQ_5P212w-l',
   );
+
+  // Sync timezone to native side on app startup
+  final appLockerService = AppLockerService();
+  final now = DateTime.now();
+  final timezone = now.timeZoneOffset.inHours >= 0
+      ? 'UTC+${now.timeZoneOffset.inHours}'
+      : 'UTC${now.timeZoneOffset.inHours}';
+  
+  try {
+    await appLockerService.syncUserTimezone(timezone);
+  } catch (e) {
+    print('Error syncing timezone on startup: $e');
+  }
 
   runApp(const MyApp());
 }

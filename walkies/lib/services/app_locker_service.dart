@@ -148,14 +148,32 @@ class AppLockerService {
   Future<void> syncNativeStepGoalPrefs({
     required int dailyGoal,
     required int todaySteps,
+    String? timezone,
   }) async {
     try {
+      // Use provided timezone or get device timezone
+      final tz = timezone ?? 'UTC';
       await platform.invokeMethod<bool>('syncStepGoalData', {
         'dailyGoal': dailyGoal,
         'todaySteps': todaySteps,
+        'timezone': tz,
       });
     } catch (_) {
       // Ignore if native bridge is temporarily unavailable.
+    }
+  }
+
+  /// Sync user's timezone to native side for proper midnight resets
+  /// Call this once at app startup or when user changes their timezone
+  Future<bool> syncUserTimezone(String timezone) async {
+    try {
+      final result = await platform.invokeMethod<bool>('syncUserTimezone', {
+        'timezone': timezone,
+      });
+      return result ?? false;
+    } catch (e) {
+      print('Error syncing timezone: $e');
+      return false;
     }
   }
 

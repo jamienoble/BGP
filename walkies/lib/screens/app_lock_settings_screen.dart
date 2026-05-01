@@ -29,6 +29,19 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _initializeAndLoadData();
+  }
+
+  /// Initialize timezone sync and load data
+  Future<void> _initializeAndLoadData() async {
+    try {
+      // Get the device's timezone and sync to native side
+      final String timezone = DateTime.now().timeZoneOffset.toString();
+      await _appLockerService.syncUserTimezone(timezone);
+    } catch (e) {
+      print('Error syncing timezone: $e');
+    }
+    
     _loadData();
   }
 
@@ -47,6 +60,15 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
 
   Future<void> _loadData() async {
     try {
+      // Get user's timezone from system (using TimeZoneOffset)
+      final now = DateTime.now();
+      final timezone = now.timeZoneOffset.inHours >= 0
+          ? 'UTC+${now.timeZoneOffset.inHours}'
+          : 'UTC${now.timeZoneOffset.inHours}';
+
+      // Sync timezone to native side
+      await _appLockerService.syncUserTimezone(timezone);
+
       // Only load social media apps instead of all apps
       final apps = await _appLockerService.getSocialMediaApps();
       final lockedApps = await _supabaseService.getLockedApps();
@@ -55,10 +77,15 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
       final stepGoal = await _supabaseService.getStepGoal();
       final todaySteps = await _supabaseService.getTodaySteps();
 
+      // Sync native step goal prefs with timezone
       await _appLockerService.syncNativeStepGoalPrefs(
         dailyGoal: stepGoal?.dailySteps ?? AppConstants.defaultDailyStepGoal,
         todaySteps: todaySteps?.steps ?? 0,
+        timezone: timezone,
       );
+      
+      // Force refresh locked apps to accessibility service
+      // This catches any day resets that may have happened while app was closed
       await _appLockerService.syncLockedAppsToAccessibilityService();
 
       setState(() {
