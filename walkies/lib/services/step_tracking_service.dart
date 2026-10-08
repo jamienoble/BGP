@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:pedometer/pedometer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,9 +11,17 @@ class StepTrackingService {
   static final StepTrackingService _instance =
       StepTrackingService._internal();
 
-  factory StepTrackingService() {
-    return _instance;
-  }
+  factory StepTrackingService() => _override ?? _instance;
+
+  static StepTrackingService? _override;
+
+  /// Replace the shared instance. For tests and screenshot previews only.
+  @visibleForTesting
+  static set debugOverride(StepTrackingService? value) => _override = value;
+
+  /// For test fakes that subclass this service.
+  @visibleForTesting
+  StepTrackingService.forTesting();
 
   StepTrackingService._internal();
 

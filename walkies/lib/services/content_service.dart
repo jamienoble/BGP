@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walkies/models/content.dart';
 
@@ -6,7 +7,17 @@ import 'package:walkies/models/content.dart';
 class ContentService {
   static final ContentService _instance = ContentService._internal();
 
-  factory ContentService() => _instance;
+  factory ContentService() => _override ?? _instance;
+
+  static ContentService? _override;
+
+  /// Replace the shared instance. For tests and screenshot previews only.
+  @visibleForTesting
+  static set debugOverride(ContentService? value) => _override = value;
+
+  /// For test fakes that subclass this service.
+  @visibleForTesting
+  ContentService.forTesting();
 
   ContentService._internal();
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walkies/models/community.dart';
 
@@ -10,7 +11,17 @@ class CommunityRateLimitException implements Exception {}
 class CommunityService {
   static final CommunityService _instance = CommunityService._internal();
 
-  factory CommunityService() => _instance;
+  factory CommunityService() => _override ?? _instance;
+
+  static CommunityService? _override;
+
+  /// Replace the shared instance. For tests and screenshot previews only.
+  @visibleForTesting
+  static set debugOverride(CommunityService? value) => _override = value;
+
+  /// For test fakes that subclass this service.
+  @visibleForTesting
+  CommunityService.forTesting();
 
   CommunityService._internal();
 

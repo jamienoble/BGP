@@ -1,11 +1,20 @@
+import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart' as permission_handler;
 
 class PermissionsService {
   static final PermissionsService _instance = PermissionsService._internal();
 
-  factory PermissionsService() {
-    return _instance;
-  }
+  factory PermissionsService() => _override ?? _instance;
+
+  static PermissionsService? _override;
+
+  /// Replace the shared instance. For tests and screenshot previews only.
+  @visibleForTesting
+  static set debugOverride(PermissionsService? value) => _override = value;
+
+  /// For test fakes that subclass this service.
+  @visibleForTesting
+  PermissionsService.forTesting();
 
   PermissionsService._internal();
 

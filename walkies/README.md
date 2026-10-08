@@ -223,3 +223,20 @@ MIT License - Feel free to modify and distribute!
 For issues or feature requests, please create an issue in the repository.
 
 **Happy Walking! 🚶‍♂️**
+
+## Screenshots and design
+
+![Walkies screens](docs/screenshots/overview.png)
+
+The look is defined in `lib/theme/app_theme.dart` (colours, type, component
+styles) and `lib/widgets/ui.dart` (shared cards, badges, avatars, notices).
+Headings use Fraunces and body text Inter, bundled in `assets/fonts/` under
+the SIL Open Font License.
+
+The screenshots are rendered from the real screens with sample data. After
+changing the UI, regenerate them with:
+
+```sh
+flutter test test/screenshots/capture.dart
+```
+

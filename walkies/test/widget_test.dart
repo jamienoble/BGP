@@ -13,10 +13,17 @@ void main() {
   testWidgets('Login screen renders key controls', (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
 
-    expect(find.text('Walkies - App Locker'), findsOneWidget);
+    expect(find.text('Walkies'), findsOneWidget);
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
-    expect(find.text('Sign In'), findsOneWidget);
-    expect(find.text('Sign Up'), findsOneWidget);
+    expect(find.text('Sign in'), findsNWidgets(2)); // tab and button
+    expect(find.text('Create account'), findsOneWidget);
+    expect(find.text('Forgot password?'), findsOneWidget);
+
+    // The name field only shows when creating an account
+    await tester.tap(find.text('Create account'));
+    await tester.pump();
+    expect(find.text('What should we call you?'), findsOneWidget);
+    expect(find.text('Forgot password?'), findsNothing);
   });
 }

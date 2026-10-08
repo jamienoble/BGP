@@ -9,6 +9,7 @@ import 'package:walkies/screens/app_lock_settings_screen.dart';
 import 'package:walkies/screens/settings_screen.dart';
 import 'package:walkies/screens/education_screen.dart';
 import 'package:walkies/screens/community_screen.dart';
+import 'package:walkies/theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,13 +31,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Walkies',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2D5A4A), // Forest green
-        ),
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFFFF8F0), // Warm cream
-      ),
+      theme: AppTheme.light(),
       // Login vs main app is decided only by the auth state below, so
       // screens never navigate between the two themselves
       home: const _AuthWrapper(),
@@ -162,7 +157,7 @@ class _MainTabNavigatorState extends State<MainTabNavigator> {
 
   final List<String> _titles = const [
     'Walkies',
-    'Education',
+    'Learn',
     'Community',
   ];
 
@@ -170,44 +165,88 @@ class _MainTabNavigatorState extends State<MainTabNavigator> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_titles[_currentIndex]),
+        toolbarHeight: 64,
+        title: _currentIndex == 0
+            ? const _BrandMark()
+            : Text(_titles[_currentIndex]),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'Settings',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const SettingsScreen(),
-                ),
-              );
-            },
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Settings',
+              style: IconButton.styleFrom(
+                backgroundColor: AppPalette.white,
+                side: const BorderSide(color: AppPalette.line),
+              ),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const SettingsScreen(),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
       body: IndexedStack(index: _currentIndex, children: _screens),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (int index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.school),
-            label: 'Education',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people),
-            label: 'Community',
-          ),
-        ],
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: AppPalette.line)),
+        ),
+        child: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: (int index) {
+            setState(() {
+              _currentIndex = index;
+            });
+          },
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.directions_walk_outlined),
+              selectedIcon: Icon(Icons.directions_walk_rounded),
+              label: 'Today',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.auto_stories_outlined),
+              selectedIcon: Icon(Icons.auto_stories_rounded),
+              label: 'Learn',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.forum_outlined),
+              selectedIcon: Icon(Icons.forum_rounded),
+              label: 'Community',
+            ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+/// App name with a small walking mark, for the Today tab
+class _BrandMark extends StatelessWidget {
+  const _BrandMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: const BoxDecoration(
+            color: AppPalette.forest,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.directions_walk_rounded,
+              color: Colors.white, size: 20),
+        ),
+        const SizedBox(width: 10),
+        const Text('Walkies'),
+      ],
     );
   }
 }

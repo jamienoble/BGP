@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:walkies/config/app_config.dart';
-import 'package:walkies/constants/app_colors.dart';
 import 'package:walkies/models/content.dart';
 import 'package:walkies/screens/education/article_screen.dart';
 import 'package:walkies/screens/education/video_screen.dart';
 import 'package:walkies/services/content_service.dart';
+import 'package:walkies/theme/app_theme.dart';
+import 'package:walkies/widgets/ui.dart';
 
-/// Education tab: the latest news summary, then articles and videos
+/// Learn (Education) tab: the latest news summary, then articles and videos
 /// published from the CMS, filterable by category.
 class EducationScreen extends StatefulWidget {
   const EducationScreen({super.key});
@@ -87,24 +88,37 @@ class _EducationScreenState extends State<EducationScreen> {
     if (mounted) setState(() => _progress = progress);
   }
 
+  String? _categoryName(String? id) {
+    if (id == null) return null;
+    for (final c in _categories) {
+      if (c.id == id) return c.name;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: AppSpacing.page,
         children: [
-          const Text(
-            'Women\'s Health Insights',
-            style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700),
+          Text('Women\'s health, explained', style: text.headlineLarge),
+          const SizedBox(height: 6),
+          Text(
+            'Short reads and videos, checked by health professionals.',
+            style: text.bodyMedium,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
           if (_news != null) ...[
             _NewsCard(article: _news!, onTap: () => _open(_news!)),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
           ],
-          if (_categories.isNotEmpty) _categoryChips(),
-          const SizedBox(height: 12),
+          if (_categories.isNotEmpty) ...[
+            _categoryChips(),
+            const SizedBox(height: 16),
+          ],
           ..._body(),
         ],
       ),
@@ -114,6 +128,7 @@ class _EducationScreenState extends State<EducationScreen> {
   Widget _categoryChips() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
+      clipBehavior: Clip.none,
       child: Row(
         children: [
           _chip('All', null),
@@ -124,15 +139,12 @@ class _EducationScreenState extends State<EducationScreen> {
   }
 
   Widget _chip(String label, String? id) {
-    final selected = _selectedCategoryId == id;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: ChoiceChip(
         label: Text(label),
-        selected: selected,
+        selected: _selectedCategoryId == id,
         onSelected: (_) => _selectCategory(id),
-        selectedColor: AppColors.sage,
-        side: const BorderSide(color: AppColors.border),
       ),
     );
   }
@@ -141,31 +153,65 @@ class _EducationScreenState extends State<EducationScreen> {
     if (_isLoading) {
       return const [
         Padding(
-          padding: EdgeInsets.all(32),
+          padding: EdgeInsets.all(40),
           child: Center(child: CircularProgressIndicator()),
         ),
       ];
     }
     if (_hasError) {
       return [
-        _Message(
-          text: 'Could not load content. Check your connection.',
-          action: TextButton(onPressed: _load, child: const Text('Try again')),
+        EmptyState(
+          icon: Icons.cloud_off_rounded,
+          title: 'Couldn\'t load content',
+          message: 'Check your connection and try again.',
+          action: OutlinedButton(onPressed: _load, child: const Text('Try again')),
         ),
       ];
     }
     if (_items.isEmpty) {
-      return const [_Message(text: 'New articles and videos are on the way.')];
+      return const [
+        EmptyState(
+          icon: Icons.auto_stories_outlined,
+          title: 'More on the way',
+          message: 'New articles and videos are added every week.',
+        ),
+      ];
     }
     return [
-      for (final item in _items)
+      for (final item in _items) ...[
         _ContentCard(
           item: item,
+          categoryName: _categoryName(item.categoryId),
           progress: _progress['${item.contentType}:${item.id}'],
           onTap: () => _open(item),
         ),
+        const SizedBox(height: AppSpacing.gap),
+      ],
     ];
   }
+}
+
+/// "6 min" for a video, "2 min read" for an article
+String contentLength(ContentItem item) {
+  if (item is Video) {
+    final seconds = item.durationSeconds;
+    return seconds == null ? 'Video' : '${(seconds / 60).ceil()} min';
+  }
+  final words = ((item as Article).body ?? item.summary ?? '')
+      .split(RegExp(r'\s+'))
+      .where((w) => w.isNotEmpty)
+      .length;
+  return '${(words / 200).ceil().clamp(1, 60)} min read';
+}
+
+/// "3h ago", "Yesterday", "4 Oct"
+String relativeDate(DateTime date) {
+  final diff = DateTime.now().difference(date);
+  if (diff.inMinutes < 60) return '${diff.inMinutes.clamp(1, 59)}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  if (diff.inDays < 2) return 'Yesterday';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return '${date.day} ${months[date.month - 1]}';
 }
 
 class _NewsCard extends StatelessWidget {
@@ -176,93 +222,57 @@ class _NewsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 1,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final text = Theme.of(context).textTheme;
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.sage,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.health_and_safety,
-                        color: AppColors.forest, size: 24),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Latest in Women\'s Health',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.forest,
-                          ),
-                        ),
-                        Text(
-                          article.sourceName != null
-                              ? 'Summary of ${article.sourceName}'
-                              : 'News summary',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.muted,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                article.title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.forest,
-                ),
-              ),
-              if (article.summary != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  article.summary!,
-                  maxLines: 4,
+              const IconBadge(Icons.newspaper_rounded, size: 34),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  [
+                    'LATEST NEWS',
+                    if (article.sourceName != null) article.sourceName!.toUpperCase(),
+                    relativeDate(article.sortDate).toUpperCase(),
+                  ].join('  ·  '),
+                  style: text.labelSmall,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    height: 1.6,
-                    color: AppColors.bodyText,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 8),
-              const Text(
-                'Read more',
-                style: TextStyle(
-                  color: AppColors.forest,
-                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 14),
+          Text(article.title, style: text.titleLarge),
+          if (article.summary != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              article.summary!,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: text.bodyMedium,
+            ),
+          ],
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Text(
+                'Read summary',
+                style: text.labelLarge!.copyWith(color: AppPalette.forest),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.arrow_forward_rounded, size: 18, color: AppPalette.forest),
+              const Spacer(),
+              if (article.isAiDrafted)
+                const Pill('Reviewed summary', icon: Icons.verified_outlined),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -270,164 +280,121 @@ class _NewsCard extends StatelessWidget {
 
 class _ContentCard extends StatelessWidget {
   final ContentItem item;
+  final String? categoryName;
   final ContentProgress? progress;
   final VoidCallback onTap;
 
   const _ContentCard({
     required this.item,
+    required this.categoryName,
     required this.progress,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
     final imageUrl = AppConfig.imageUrl(item.imageRef);
-    final video = item is Video ? item as Video : null;
-    final duration = video?.durationSeconds;
+    final isVideo = item is Video;
+    final duration = isVideo ? (item as Video).durationSeconds : null;
     final fraction = (duration != null && duration > 0 && progress != null)
         ? (progress!.completed ? 1.0 : progress!.progressSeconds / duration)
         : null;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 14),
-      elevation: 1,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  imageUrl != null
-                      ? Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => _placeholder(video),
-                        )
-                      : _placeholder(video),
-                  if (video != null)
-                    const Center(
-                      child: CircleAvatar(
-                        radius: 26,
-                        backgroundColor: Colors.black54,
-                        child: Icon(Icons.play_arrow,
-                            color: Colors.white, size: 32),
-                      ),
-                    ),
-                  if (duration != null)
-                    Positioned(
-                      right: 8,
-                      bottom: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black87,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          _formatDuration(duration),
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 12),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (fraction != null)
-              LinearProgressIndicator(
-                value: fraction.clamp(0.0, 1.0),
-                minHeight: 3,
-                color: AppColors.accent,
-                backgroundColor: AppColors.sand,
-              ),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    video != null ? 'VIDEO' : 'ARTICLE',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.muted,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    item.title,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.forest,
-                    ),
-                  ),
-                  if (item.summary != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      item.summary!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: AppColors.bodyText),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+    final artwork = ArtworkPlaceholder(
+      seed: item.categoryId ?? item.id,
+      icon: isVideo ? Icons.play_lesson_outlined : Icons.menu_book_rounded,
+      iconSize: 52,
     );
-  }
 
-  Widget _placeholder(Video? video) => Container(
-        color: AppColors.sage,
-        child: Icon(
-          video != null ? Icons.ondemand_video : Icons.article_outlined,
-          color: AppColors.forest,
-          size: 40,
-        ),
-      );
-}
-
-class _Message extends StatelessWidget {
-  final String text;
-  final Widget? action;
-
-  const _Message({required this.text, this.action});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 32),
+    return AppCard(
+      onTap: onTap,
+      padding: EdgeInsets.zero,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            text,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.muted),
+          AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                imageUrl != null
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => artwork,
+                      )
+                    : artwork,
+                Positioned(
+                  left: 12,
+                  top: 12,
+                  child: Pill(
+                    '${isVideo ? 'Video' : 'Article'} · ${contentLength(item)}',
+                    icon: isVideo ? Icons.play_arrow_rounded : Icons.article_outlined,
+                    background: AppPalette.white,
+                  ),
+                ),
+                if (isVideo)
+                  Center(
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.95),
+                        shape: BoxShape.circle,
+                        boxShadow: const [
+                          BoxShadow(color: Color(0x33000000), blurRadius: 16),
+                        ],
+                      ),
+                      child: const Icon(Icons.play_arrow_rounded,
+                          size: 36, color: AppPalette.forest),
+                    ),
+                  ),
+                if (fraction != null)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: LinearProgressIndicator(
+                      value: fraction.clamp(0.0, 1.0),
+                      minHeight: 4,
+                      color: AppPalette.terracotta,
+                      backgroundColor: Colors.white.withValues(alpha: 0.5),
+                    ),
+                  ),
+              ],
+            ),
           ),
-          ?action,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (categoryName != null) ...[
+                  Text(categoryName!.toUpperCase(), style: text.labelSmall),
+                  const SizedBox(height: 6),
+                ],
+                Text(item.title, style: text.titleLarge),
+                if (item.summary != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    item.summary!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: text.bodyMedium,
+                  ),
+                ],
+                if (fraction != null && fraction < 1) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Continue watching',
+                    style: text.labelMedium!.copyWith(color: AppPalette.terracotta),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
-}
-
-String _formatDuration(int seconds) {
-  final m = seconds ~/ 60;
-  final s = (seconds % 60).toString().padLeft(2, '0');
-  return '$m:$s';
 }

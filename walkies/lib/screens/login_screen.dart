@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:walkies/theme/app_theme.dart';
+import 'package:walkies/widgets/ui.dart';
 import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/services/network_service.dart';
 
@@ -14,6 +16,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   final _preferredNameController = TextEditingController();
   bool _isLoading = false;
+  bool _isCreatingAccount = false;
+  bool _obscurePassword = true;
   String? _errorMessage;
 
   final _supabaseService = SupabaseService();
@@ -86,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final preferredName = _preferredNameController.text.trim();
     if (preferredName.isEmpty) {
       setState(() {
-        _errorMessage = 'Please enter your preferred name.';
+        _errorMessage = 'Please tell us what to call you.';
       });
       return;
     }
@@ -202,95 +206,201 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final creating = _isCreatingAccount;
     return Scaffold(
-      appBar: AppBar(title: const Text('Walkies - App Locker')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
           children: [
-            if (_errorMessage != null)
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 16.0),
-                padding: const EdgeInsets.all(12.0),
-                decoration: BoxDecoration(
-                  color: Colors.orange[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade200),
-                ),
-                child: Text(
-                  _errorMessage!,
-                  style: TextStyle(color: Colors.orange.shade900),
+            const _Hero(),
+            const SizedBox(height: 28),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Sign in')),
+                ButtonSegment(value: true, label: Text('Create account')),
+              ],
+              selected: {creating},
+              showSelectedIcon: false,
+              onSelectionChanged: _isLoading
+                  ? null
+                  : (value) => setState(() {
+                        _isCreatingAccount = value.first;
+                        _errorMessage = null;
+                      }),
+              style: SegmentedButton.styleFrom(
+                backgroundColor: AppPalette.white,
+                selectedBackgroundColor: AppPalette.forest,
+                selectedForegroundColor: AppPalette.white,
+                foregroundColor: AppPalette.body,
+                side: const BorderSide(color: AppPalette.line),
+                minimumSize: const Size(0, 48),
+                textStyle: text.labelLarge,
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (_errorMessage != null) ...[
+              NoticeCard(
+                tone: NoticeTone.danger,
+                icon: Icons.error_outline_rounded,
+                title: _errorMessage!,
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (creating) ...[
+              TextField(
+                controller: _preferredNameController,
+                enabled: !_isLoading,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'What should we call you?',
+                  prefixIcon: Icon(Icons.person_outline_rounded),
                 ),
               ),
+              const SizedBox(height: 14),
+            ],
             TextField(
               controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
-              ),
+              enabled: !_isLoading,
               keyboardType: TextInputType.emailAddress,
               autofillHints: const [AutofillHints.email],
-              enabled: !_isLoading,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                prefixIcon: Icon(Icons.mail_outline_rounded),
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             TextField(
               controller: _passwordController,
-              decoration: const InputDecoration(
+              enabled: !_isLoading,
+              obscureText: _obscurePassword,
+              autofillHints: [
+                creating ? AutofillHints.newPassword : AutofillHints.password,
+              ],
+              decoration: InputDecoration(
                 labelText: 'Password',
-                border: OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.lock_outline_rounded),
+                suffixIcon: IconButton(
+                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                  icon: Icon(_obscurePassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined),
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
+                ),
               ),
-              obscureText: true,
-              enabled: !_isLoading,
             ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: _isLoading ? null : _handleForgotPassword,
-                child: const Text('Forgot password?'),
-              ),
+            if (!creating)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _isLoading ? null : _handleForgotPassword,
+                  child: const Text('Forgot password?'),
+                ),
+              )
+            else
+              const SizedBox(height: 16),
+            const SizedBox(height: 4),
+            FilledButton(
+              onPressed: _isLoading
+                  ? null
+                  : (creating ? _handleSignUp : _handleSignIn),
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text(creating ? 'Create account' : 'Sign in'),
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _preferredNameController,
-              decoration: const InputDecoration(
-                labelText: 'Preferred name (new accounts)',
-                border: OutlineInputBorder(),
-              ),
-              enabled: !_isLoading,
-            ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 18),
             Row(
               children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _handleSignIn,
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Sign In'),
-                  ),
+                const Expanded(child: Divider()),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('or', style: text.bodySmall),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _isLoading ? null : _handleSignUp,
-                    child: const Text('Sign Up'),
-                  ),
-                ),
+                const Expanded(child: Divider()),
               ],
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _isLoading ? null : _handleGoogleSignIn,
-                icon: const Icon(Icons.account_circle_outlined),
-                label: const Text('Continue with Google'),
+            const SizedBox(height: 18),
+            OutlinedButton.icon(
+              onPressed: _isLoading ? null : _handleGoogleSignIn,
+              icon: const Text(
+                'G',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                  color: AppPalette.forest,
+                ),
+              ),
+              label: const Text('Continue with Google'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Hero extends StatelessWidget {
+  const _Hero();
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(32),
+      child: SizedBox(
+        height: 250,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            const ArtworkPlaceholder(
+              seed: 'walkies',
+              icon: Icons.circle,
+              iconSize: 0,
+              palette: 0,
+            ),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0x002D5A4A), Color(0xCC1E3D33)],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.directions_walk_rounded,
+                        color: AppPalette.forest, size: 30),
+                  ),
+                  const Spacer(),
+                  Text(
+                    'Walkies',
+                    style: text.displayMedium!.copyWith(color: Colors.white),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Walk more. Scroll less. Your apps unlock when you hit '
+                    'your daily steps.',
+                    style: text.bodyLarge!.copyWith(color: Colors.white70),
+                  ),
+                ],
               ),
             ),
           ],

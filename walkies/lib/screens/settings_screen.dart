@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:walkies/screens/goal_management_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkies/constants/app_constants.dart';
+import 'package:walkies/theme/app_theme.dart';
+import 'package:walkies/widgets/ui.dart';
 import 'package:walkies/services/app_locker_service.dart';
 import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/services/supabase_service.dart';
@@ -172,105 +174,166 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
+      appBar: AppBar(title: const Text('Settings')),
       body: ListView(
+        padding: AppSpacing.page,
         children: [
-          // Daily Goal Section
-          Card(
-            margin: const EdgeInsets.all(16.0),
-            child: ListTile(
-              title: const Text('Daily Step Goal'),
-              subtitle: const Text('Set your daily step target'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.of(context).push(
+          const SectionLabel('Your goal'),
+          _SettingsGroup(
+            children: [
+              _SettingsRow(
+                icon: Icons.flag_outlined,
+                title: 'Daily step goal',
+                subtitle: 'Changes start the next day',
+                onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => const GoalManagementScreen(),
                   ),
-                );
-              },
-            ),
-          ),
-
-          // App Locks Section
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: ListTile(
-              title: const Text('App Locks'),
-              subtitle: const Text('Manage locked apps'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.of(context).pushNamed('/app_locks');
-              },
-            ),
-          ),
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-            child: ListTile(
-              title: const Text('Preferred Name'),
-              subtitle: Text(_preferredName ?? 'Set your display name'),
-              trailing: _isSavingName
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.chevron_right),
-              onTap: _isSavingName ? null : _editPreferredName,
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: SwitchListTile(
-              title: const Text('Lock Community until goal met'),
-              subtitle: const Text(
-                'Treat the Community tab like a locked app',
+                ),
               ),
-              value: _lockCommunity,
-              onChanged: _setCommunityLock,
-            ),
+              _SettingsRow(
+                icon: Icons.lock_outline_rounded,
+                iconBackground: AppPalette.terracottaSoft,
+                iconColour: const Color(0xFF8A4318),
+                title: 'App locks',
+                subtitle: 'Apps that wait until you reach your goal',
+                onTap: () => Navigator.of(context).pushNamed('/app_locks'),
+              ),
+              _SettingsRow(
+                icon: Icons.forum_outlined,
+                title: 'Lock Community',
+                subtitle: 'Until you reach your goal, like a locked app',
+                trailing: Switch(
+                  value: _lockCommunity,
+                  onChanged: _setCommunityLock,
+                ),
+                onTap: () => _setCommunityLock(!_lockCommunity),
+              ),
+            ],
           ),
-          const SizedBox(height: 24),
-          // Account Section
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Text(
-              'Account',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
+          const SizedBox(height: 12),
+          const SectionLabel('Profile'),
+          _SettingsGroup(
+            children: [
+              _SettingsRow(
+                icon: Icons.person_outline_rounded,
+                title: 'Preferred name',
+                subtitle: _preferredName ?? 'Set the name we greet you with',
+                trailing: _isSavingName
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : null,
+                onTap: _isSavingName ? null : _editPreferredName,
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-
-          // Sign Out Button
-          Card(
-            margin: const EdgeInsets.all(16.0),
-            child: ListTile(
-              title: const Text('Sign Out'),
-              leading: const Icon(Icons.logout, color: Colors.red),
-              titleTextStyle: const TextStyle(color: Colors.red),
-              onTap: _signOut,
-            ),
+          const SizedBox(height: 12),
+          const SectionLabel('Account'),
+          _SettingsGroup(
+            children: [
+              _SettingsRow(
+                icon: Icons.logout_rounded,
+                title: 'Sign out',
+                onTap: _signOut,
+              ),
+              _SettingsRow(
+                icon: Icons.delete_outline_rounded,
+                iconBackground: AppPalette.dangerSoft,
+                iconColour: AppPalette.danger,
+                title: 'Delete account',
+                titleColour: AppPalette.danger,
+                subtitle: 'Permanently remove your account and data',
+                onTap: _deleteAccount,
+              ),
+            ],
           ),
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: ListTile(
-              title: const Text('Delete account'),
-              subtitle: const Text('Permanently remove your account and data'),
-              leading: Icon(Icons.delete_forever, color: Colors.red[700]),
-              onTap: _deleteAccount,
-            ),
-          ),
-
-          const SizedBox(height: 32),
         ],
+      ),
+    );
+  }
+}
+
+/// White rounded group of rows separated by hairlines
+class _SettingsGroup extends StatelessWidget {
+  final List<Widget> children;
+
+  const _SettingsGroup({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0) const Divider(indent: 70),
+            children[i],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final Color iconBackground;
+  final Color iconColour;
+  final Color? titleColour;
+
+  const _SettingsRow({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+    this.onTap,
+    this.iconBackground = AppPalette.sage,
+    this.iconColour = AppPalette.forest,
+    this.titleColour,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+        child: Row(
+          children: [
+            IconBadge(
+              icon,
+              size: 40,
+              background: iconBackground,
+              foreground: iconColour,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: text.titleMedium!.copyWith(color: titleColour),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(subtitle!, style: text.bodySmall),
+                  ],
+                ],
+              ),
+            ),
+            trailing ??
+                const Icon(Icons.chevron_right_rounded, color: AppPalette.muted),
+          ],
+        ),
       ),
     );
   }

@@ -1,159 +1,120 @@
 import 'package:flutter/material.dart';
+import 'package:walkies/theme/app_theme.dart';
 import 'package:walkies/utils/date_utils.dart' as date_utils;
+import 'package:walkies/widgets/ui.dart';
 
-/// Widget to display weekly streak with day indicators
-/// Shows M, T, W, T, F, S, S for the current week
-/// with visual indicators for whether goals were met
+/// This week (Monday to Sunday) with a mark for each day the goal was met,
+/// plus the current streak.
 class WeeklyStreakWidget extends StatelessWidget {
   final Map<DateTime, bool> dailyGoalsMet;
   final int currentStreak;
 
   const WeeklyStreakWidget({
-    Key? key,
+    super.key,
     required this.dailyGoalsMet,
     required this.currentStreak,
-  }) : super(key: key);
+  });
+
+  static const _labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
   @override
   Widget build(BuildContext context) {
-    final weekDays = _getWeekDays();
-    final dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final text = Theme.of(context).textTheme;
+    final days = date_utils.DateUtils.getCurrentWeekDays();
+    final today = date_utils.DateUtils.getDayStart(DateTime.now());
 
-    return Card(
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Weekly Streak',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12.0,
-                    vertical: 6.0,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE0E8E4),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.local_fire_department,
-                        color: const Color(0xFFD4773D),
-                        size: 20,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$currentStreak day${currentStreak != 1 ? 's' : ''}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFFD4773D),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            // Days grid
-            SizedBox(
-              width: double.infinity,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: List.generate(
-                  7,
-                  (index) => _DayStreak(
-                    label: dayLabels[index],
-                    date: weekDays[index],
-                    goalMet: dailyGoalsMet[weekDays[index]] ?? false,
-                    isToday: _isToday(weekDays[index]),
-                  ),
-                ),
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('This week', style: text.titleLarge)),
+              Pill(
+                '$currentStreak-day streak',
+                icon: Icons.local_fire_department_rounded,
+                background: AppPalette.terracottaSoft,
+                foreground: const Color(0xFF8A4318),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (var i = 0; i < 7; i++)
+                _Day(
+                  label: _labels[i],
+                  met: dailyGoalsMet[days[i]] ?? false,
+                  isToday: days[i] == today,
+                  isFuture: days[i].isAfter(today),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
-
-  List<DateTime> _getWeekDays() => date_utils.DateUtils.getCurrentWeekDays();
-
-  bool _isToday(DateTime date) => date_utils.DateUtils.isToday(date);
 }
 
-/// Individual day streak indicator
-class _DayStreak extends StatelessWidget {
+class _Day extends StatelessWidget {
   final String label;
-  final DateTime date;
-  final bool goalMet;
+  final bool met;
   final bool isToday;
+  final bool isFuture;
 
-  const _DayStreak({
+  const _Day({
     required this.label,
-    required this.date,
-    required this.goalMet,
+    required this.met,
     required this.isToday,
+    required this.isFuture,
   });
 
   @override
   Widget build(BuildContext context) {
+    final Widget mark;
+    if (met) {
+      mark = Container(
+        decoration: const BoxDecoration(
+          color: AppPalette.forest,
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.check_rounded, color: Colors.white, size: 20),
+      );
+    } else if (isToday) {
+      mark = Container(
+        decoration: BoxDecoration(
+          color: AppPalette.white,
+          shape: BoxShape.circle,
+          border: Border.all(color: AppPalette.forest, width: 2),
+        ),
+        child: const Icon(Icons.directions_walk_rounded,
+            color: AppPalette.forest, size: 18),
+      );
+    } else {
+      mark = Container(
+        decoration: BoxDecoration(
+          color: isFuture ? AppPalette.cream : AppPalette.sand,
+          shape: BoxShape.circle,
+          border: isFuture ? Border.all(color: AppPalette.line) : null,
+        ),
+      );
+    }
+
     return Column(
       children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: _getBackgroundColor(),
-            border: isToday
-                ? Border.all(color: const Color(0xFF2D5A4A), width: 2)
-                : null,
-          ),
-          child: Center(
-            child: goalMet
-                ? const Icon(Icons.check, color: Colors.white, size: 24)
-                : Text(
-                    label,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: _getTextColor(),
-                    ),
-                  ),
-          ),
-        ),
-        const SizedBox(height: 4),
+        SizedBox(width: 36, height: 36, child: mark),
+        const SizedBox(height: 8),
         Text(
           label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 12,
+            fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
+            color: isToday ? AppPalette.forestDeep : AppPalette.muted,
+          ),
         ),
       ],
     );
-  }
-
-  Color _getBackgroundColor() {
-    if (goalMet) {
-      return const Color(0xFF7CB342); // Vibrant yellow-green for success
-    }
-    if (isToday) {
-      return const Color(0xFFE0E8E4); // Soft sage for today
-    }
-    return const Color(0xFFE8D7C3); // Warm cream for past days
-  }
-
-  Color _getTextColor() {
-    if (isToday) {
-      return const Color(0xFF2D5A4A); // Forest green
-    }
-    return const Color(0xFF8BA39E); // Muted sage
   }
 }

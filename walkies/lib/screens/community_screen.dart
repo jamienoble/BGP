@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:walkies/constants/app_colors.dart';
+import 'package:walkies/theme/app_theme.dart';
+import 'package:walkies/widgets/ui.dart';
 import 'package:walkies/constants/app_constants.dart';
 import 'package:walkies/constants/community_rules.dart';
 import 'package:walkies/models/community.dart';
@@ -260,16 +261,22 @@ class _CommunityScreenState extends State<CommunityScreen>
       case _View.loading:
         return const Center(child: CircularProgressIndicator());
       case _View.error:
-        return _CenteredMessage(
-          icon: Icons.cloud_off,
-          text: 'Could not load the community. Check your connection.',
-          action: TextButton(onPressed: _load, child: const Text('Try again')),
+        return Center(
+          child: EmptyState(
+            icon: Icons.cloud_off_rounded,
+            title: 'Couldn\'t load the community',
+            message: 'Check your connection and try again.',
+            action: OutlinedButton(onPressed: _load, child: const Text('Try again')),
+          ),
         );
       case _View.locked:
-        return _CenteredMessage(
-          icon: Icons.lock_outline,
-          text: 'The community unlocks when you reach today\'s goal.\n'
-              '$_stepsRemaining steps to go.',
+        return Center(
+          child: EmptyState(
+            icon: Icons.lock_outline_rounded,
+            title: 'Unlocks at your goal',
+            message: 'You chose to keep the community locked until you reach '
+                'today\'s goal. ${formatNumber(_stepsRemaining)} steps to go.',
+          ),
         );
       case _View.join:
         return _JoinCommunity(onJoined: _load);
@@ -279,127 +286,147 @@ class _CommunityScreenState extends State<CommunityScreen>
   }
 
   Widget _feed() {
+    final text = Theme.of(context).textTheme;
     return Stack(
       children: [
-        Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 0, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          for (final t in _topics)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: ChoiceChip(
-                                label: Text(t.name),
-                                selected: t.id == _topic?.id,
-                                onSelected: (_) => _selectTopic(t),
-                                selectedColor: AppColors.sage,
-                                side: const BorderSide(color: AppColors.border),
-                              ),
-                            ),
+        RefreshIndicator(
+          onRefresh: _load,
+          child: CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 8, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Hi ${_profile?.displayName ?? 'there'}',
+                          style: text.headlineLarge,
+                        ),
+                      ),
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_horiz_rounded),
+                        onSelected: (value) {
+                          if (value == 'rules') _showRules(context);
+                          if (value == 'name') _changeDisplayName();
+                          if (value == 'blocked') {
+                            Navigator.of(context)
+                                .push(MaterialPageRoute(
+                                  builder: (_) => const BlockedUsersScreen(),
+                                ))
+                                .then((_) => _load());
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(value: 'rules', child: Text('Community rules')),
+                          PopupMenuItem(value: 'name', child: Text('Change display name')),
+                          PopupMenuItem(value: 'blocked', child: Text('Blocked people')),
                         ],
                       ),
-                    ),
-                  ),
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert),
-                    onSelected: (value) {
-                      if (value == 'rules') _showRules(context);
-                      if (value == 'name') _changeDisplayName();
-                      if (value == 'blocked') {
-                        Navigator.of(context)
-                            .push(MaterialPageRoute(
-                              builder: (_) => const BlockedUsersScreen(),
-                            ))
-                            .then((_) => _load());
-                      }
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(value: 'rules', child: Text('Community rules')),
-                      PopupMenuItem(value: 'name', child: Text('Change display name')),
-                      PopupMenuItem(value: 'blocked', child: Text('Blocked people')),
                     ],
                   ),
-                ],
-              ),
-            ),
-            if (_bannedUntil != null)
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange[50],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  _bannedUntil!.year >= 9999
-                      ? 'Your account can no longer post in the community.'
-                      : 'You can post again from '
-                          '${_bannedUntil!.day}/${_bannedUntil!.month}/${_bannedUntil!.year}.',
-                  style: TextStyle(color: Colors.orange[900]),
                 ),
               ),
-            if (_topic?.description != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: Align(
-                  alignment: Alignment.centerLeft,
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
                   child: Text(
-                    _topic!.description!,
-                    style: const TextStyle(color: AppColors.muted),
+                    'Walking wins, questions and support from other members.',
+                    style: text.bodyMedium,
                   ),
                 ),
               ),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _load,
-                child: _posts.isEmpty
-                    ? ListView(
-                        children: const [
-                          SizedBox(height: 80),
-                          Center(
-                            child: Text(
-                              'No posts yet. Start the conversation.',
-                              style: TextStyle(color: AppColors.muted),
-                            ),
+              SliverToBoxAdapter(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      for (final t in _topics)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            avatar: t.isLocked
+                                ? Icon(
+                                    Icons.campaign_outlined,
+                                    size: 18,
+                                    color: t.id == _topic?.id
+                                        ? Colors.white
+                                        : AppPalette.muted,
+                                  )
+                                : null,
+                            label: Text(t.name),
+                            selected: t.id == _topic?.id,
+                            onSelected: (_) => _selectTopic(t),
                           ),
-                        ],
-                      )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
-                        itemCount: _posts.length,
-                        itemBuilder: (context, i) {
-                          final post = _posts[i];
-                          return PostCard(
-                            post: post,
-                            isMine: post.authorId == _service.currentUserId,
-                            onTap: () => _openPost(post),
-                            onToggleReaction: () => _toggleReaction(post),
-                            onAction: (a) => _onPostAction(post, a),
-                          );
-                        },
-                      ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ],
+              if (_bannedUntil != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                    child: NoticeCard(
+                      tone: NoticeTone.warning,
+                      icon: Icons.block_rounded,
+                      title: _bannedUntil!.year >= 9999
+                          ? 'Your account can no longer post'
+                          : 'Posting paused until '
+                              '${_bannedUntil!.day}/${_bannedUntil!.month}/${_bannedUntil!.year}',
+                      message: 'You can still read and react to posts.',
+                    ),
+                  ),
+                ),
+              if (_topic?.description != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                    child: Text(_topic!.description!, style: text.bodySmall),
+                  ),
+                ),
+              if (_posts.isEmpty)
+                SliverToBoxAdapter(
+                  child: EmptyState(
+                    icon: Icons.forum_outlined,
+                    title: 'No posts yet',
+                    message: _canPost
+                        ? 'Be the first to share something here.'
+                        : 'Check back soon.',
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 100),
+                  sliver: SliverList.separated(
+                    itemCount: _posts.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (context, i) {
+                      final post = _posts[i];
+                      return PostCard(
+                        post: post,
+                        isMine: post.authorId == _service.currentUserId,
+                        onTap: () => _openPost(post),
+                        onToggleReaction: () => _toggleReaction(post),
+                        onAction: (a) => _onPostAction(post, a),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
         ),
         if (_canPost)
           Positioned(
-            right: 16,
-            bottom: 16,
+            right: 20,
+            bottom: 20,
             child: FloatingActionButton.extended(
               heroTag: 'new_post',
               onPressed: _newPost,
-              icon: const Icon(Icons.edit),
-              label: const Text('Post'),
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('New post'),
             ),
           ),
       ],
@@ -481,99 +508,172 @@ class _JoinCommunityState extends State<_JoinCommunity> {
   @override
   Widget build(BuildContext context) {
     final canJoin = _isAdult && _acceptsRules && !_isJoining;
+    final text = Theme.of(context).textTheme;
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: AppSpacing.page,
       children: [
-        const Text(
-          'Join the community',
-          style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
-        ),
         const SizedBox(height: 8),
-        const Text(
-          'Share walking wins and support each other. Other members see your '
-          'display name, not your email.',
-          style: TextStyle(color: AppColors.bodyText, height: 1.5),
+        const _CommunityHero(),
+        const SizedBox(height: 22),
+        Text('Walk together', style: text.headlineLarge),
+        const SizedBox(height: 8),
+        Text(
+          'Share walking wins, swap routes and support each other. Other '
+          'members see your display name, never your email.',
+          style: text.bodyMedium,
         ),
-        const SizedBox(height: 20),
-        TextField(
-          controller: _nameController,
-          maxLength: 30,
-          decoration: const InputDecoration(
-            labelText: 'Display name',
-            helperText: 'Doesn\'t need to be your real name',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        CheckboxListTile(
-          value: _isAdult,
-          onChanged: (v) => setState(() => _isAdult = v ?? false),
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          title: const Text('I am 18 or over'),
-        ),
-        CheckboxListTile(
-          value: _acceptsRules,
-          onChanged: (v) => setState(() => _acceptsRules = v ?? false),
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          title: const Text('I agree to the community rules'),
-          subtitle: GestureDetector(
-            onTap: () => _showRules(context),
-            child: const Text(
-              'Read the rules',
-              style: TextStyle(
-                color: AppColors.forest,
-                decoration: TextDecoration.underline,
+        const SizedBox(height: 22),
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _nameController,
+                maxLength: 30,
+                decoration: const InputDecoration(
+                  labelText: 'Display name',
+                  helperText: 'Doesn\'t need to be your real name',
+                  prefixIcon: Icon(Icons.badge_outlined),
+                ),
               ),
-            ),
+              const SizedBox(height: 4),
+              _Agreement(
+                value: _isAdult,
+                onChanged: (v) => setState(() => _isAdult = v),
+                title: 'I am 18 or over',
+              ),
+              _Agreement(
+                value: _acceptsRules,
+                onChanged: (v) => setState(() => _acceptsRules = v),
+                title: 'I agree to the community rules',
+                link: 'Read the rules',
+                onLink: () => _showRules(context),
+              ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _error!,
+                    style: text.bodySmall!.copyWith(color: AppPalette.danger),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: canJoin ? _join : null,
+                  child: _isJoining
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Join the community'),
+                ),
+              ),
+            ],
           ),
-        ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(_error!, style: TextStyle(color: Colors.red[700])),
-          ),
-        const SizedBox(height: 16),
-        ElevatedButton(
-          onPressed: canJoin ? _join : null,
-          child: _isJoining
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Join'),
         ),
       ],
     );
   }
 }
 
-class _CenteredMessage extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  final Widget? action;
+class _Agreement extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final String title;
+  final String? link;
+  final VoidCallback? onLink;
 
-  const _CenteredMessage({required this.icon, required this.text, this.action});
+  const _Agreement({
+    required this.value,
+    required this.onChanged,
+    required this.title,
+    this.link,
+    this.onLink,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    final text = Theme.of(context).textTheme;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => onChanged(!value),
       child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
           children: [
-            Icon(icon, size: 48, color: AppColors.muted),
-            const SizedBox(height: 12),
-            Text(
-              text,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, color: AppColors.bodyText),
+            Checkbox(value: value, onChanged: (v) => onChanged(v ?? false)),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: text.titleSmall),
+                  if (link != null)
+                    GestureDetector(
+                      onTap: onLink,
+                      child: Text(
+                        link!,
+                        style: text.bodySmall!.copyWith(
+                          color: AppPalette.forest,
+                          decoration: TextDecoration.underline,
+                          decorationColor: AppPalette.forest,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-            ?action,
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Overlapping member avatars around a walking icon
+class _CommunityHero extends StatelessWidget {
+  const _CommunityHero();
+
+  @override
+  Widget build(BuildContext context) {
+    const names = ['Sophie', 'Aisha', 'Megan', 'Priya'];
+    return SizedBox(
+      height: 120,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: 120,
+            height: 120,
+            decoration: const BoxDecoration(
+              color: AppPalette.sage,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.diversity_3_rounded,
+                size: 56, color: AppPalette.forest),
+          ),
+          for (var i = 0; i < names.length; i++)
+            Align(
+              alignment: const [
+                Alignment(-0.62, -0.7),
+                Alignment(0.6, -0.85),
+                Alignment(-0.48, 0.85),
+                Alignment(0.66, 0.6),
+              ][i],
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(
+                  color: AppPalette.cream,
+                  shape: BoxShape.circle,
+                ),
+                child: InitialAvatar(names[i], size: 38),
+              ),
+            ),
+        ],
       ),
     );
   }

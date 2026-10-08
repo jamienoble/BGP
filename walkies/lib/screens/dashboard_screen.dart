@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/services/permissions_service.dart';
@@ -12,6 +11,8 @@ import 'package:walkies/services/app_locker_service.dart';
 import 'package:walkies/services/goal_rules.dart';
 import 'package:walkies/screens/app_lock_settings_screen.dart';
 import 'package:walkies/widgets/weekly_streak_widget.dart';
+import 'package:walkies/widgets/ui.dart';
+import 'package:walkies/theme/app_theme.dart';
 import 'package:walkies/constants/app_constants.dart';
 import 'package:walkies/utils/date_utils.dart' as date_utils;
 
@@ -303,281 +304,179 @@ class _DashboardScreenState extends State<DashboardScreen>
       return const Center(child: CircularProgressIndicator());
     }
 
+    final text = Theme.of(context).textTheme;
     final goalSteps = _dailyGoal;
-    final progress = goalSteps > 0 ? _currentSteps / goalSteps : 0.0;
+    final progress =
+        goalSteps > 0 ? (_currentSteps / goalSteps).clamp(0.0, 1.0) : 0.0;
     final goalMet = _currentSteps >= goalSteps;
-    final stepsRemaining = (goalSteps - _currentSteps).clamp(0, goalSteps);
-    final stepDigits = _currentSteps
-        .clamp(0, 99999)
-        .toString()
-        .padLeft(5, '0')
-        .split('');
-    final distanceKm = (_currentSteps * 0.0008);
+    final distanceKm = _currentSteps * 0.0008;
+    final activeMinutes = (_currentSteps / 100).round();
     final greetingName = _preferredName ?? _userDisplayName();
+    final now = DateTime.now();
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView(
+        padding: AppSpacing.page,
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              '${_greeting()}, $greetingName',
-              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700),
-            ),
+          Text(
+            '${_weekdays[now.weekday - 1]} ${now.day} ${_months[now.month - 1]}'
+                .toUpperCase(),
+            style: text.labelSmall,
           ),
           const SizedBox(height: 6),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              goalMet
-                  ? 'Goal complete - your apps are unlocked'
-                  : '$stepsRemaining steps until you unlock',
-              style: TextStyle(fontSize: 16, color: const Color(0xFF5D7B6D)),
-            ),
-          ),
+          Text('${_greeting()}, $greetingName', style: text.headlineLarge),
           const SizedBox(height: 18),
-          Card(
-            elevation: 1,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-              side: BorderSide(color: const Color(0xFFE8D7C3)),
+          if (_stepTrackingService.initializationError != null) ...[
+            NoticeCard(
+              tone: NoticeTone.warning,
+              icon: Icons.directions_walk_rounded,
+              title: 'Step counting is off',
+              message: 'Allow physical activity access so Walkies can count '
+                  'your steps and unlock your apps.',
+              actions: [
+                FilledButton(
+                  onPressed: () => PermissionsService().openAppSettings(),
+                  child: const Text('Open settings'),
+                ),
+                OutlinedButton(
+                  onPressed: _loadData,
+                  child: const Text('Try again'),
+                ),
+              ],
             ),
-            color: Colors.white,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: List.generate(stepDigits.length, (index) {
-                      final digit = stepDigits[index];
-                      return Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.only(
-                            right: index == stepDigits.length - 1 ? 0 : 8,
-                          ),
-                          child: Container(
-                            height: 116,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF5EFE5),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFFE8D7C3)),
-                            ),
-                            child: Column(
-                              children: [
-                                Expanded(
-                                  flex: 2,
-                                  child: Center(
-                                    child: Text(
-                                      ((int.parse(digit) + 9) % 10).toString(),
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: const Color(0xFF8BA39E),
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Divider(
-                                  height: 1,
-                                  thickness: 1,
-                                  color: const Color(0xFFE8D7C3),
-                                ),
-                                Expanded(
-                                  flex: 5,
-                                  child: Center(
-                                    child: Text(
-                                      digit,
-                                      style: const TextStyle(
-                                        fontSize: 40,
-                                        height: 1.0,
-                                        fontWeight: FontWeight.w700,
-                                        color: Color(0xFF2D5A4A),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Divider(
-                                  height: 1,
-                                  thickness: 1,
-                                  color: const Color(0xFFE8D7C3),
-                                ),
-                                Expanded(
-                                  flex: 2,
-                                  child: Center(
-                                    child: Text(
-                                      ((int.parse(digit) + 1) % 10).toString(),
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: const Color(0xFF8BA39E),
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '$_currentSteps steps',
-                        style: const TextStyle(
-                          color: Color(0xFF2D5A4A),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        '/$goalSteps',
-                        style: TextStyle(
-                          color: const Color(0xFF8BA39E),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  LinearProgressIndicator(
-                    value: progress.clamp(0.0, 1.0),
-                    minHeight: 8,
-                    borderRadius: BorderRadius.circular(999),
-                    color: Colors.deepPurple,
-                    backgroundColor: Colors.deepPurple.shade100,
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: AppSpacing.gap),
+          ],
+          _StepsHero(
+            steps: _currentSteps,
+            goal: goalSteps,
+            progress: progress,
+            goalMet: goalMet,
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: AppSpacing.gap),
           Row(
             children: [
               Expanded(
-                child: _statCard('DISTANCE', distanceKm.toStringAsFixed(1), 'km'),
+                child: _StatTile(
+                  icon: Icons.route_rounded,
+                  value: distanceKm.toStringAsFixed(1),
+                  unit: 'km',
+                  label: 'Distance',
+                ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
-                child: _statCard('STREAK', '$_currentStreak', 'days'),
+                child: _StatTile(
+                  icon: Icons.local_fire_department_rounded,
+                  value: '$_currentStreak',
+                  unit: _currentStreak == 1 ? 'day' : 'days',
+                  label: 'Streak',
+                  accent: true,
+                ),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Card(
-            elevation: 1,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: Colors.grey.shade200),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "TODAY'S NUDGE",
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.grey.shade500,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _currentSteps < goalSteps * 0.5
-                        ? 'A 10-min walk now can make a big dent in your goal.'
-                        : 'You are over halfway there. Keep your momentum going.',
-                    style: TextStyle(
-                      color: Colors.grey.shade800,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          WeeklyStreakWidget(
-            dailyGoalsMet: _dailyGoalsMet,
-            currentStreak: _currentStreak,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
+              const SizedBox(width: 10),
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const AppLockSettingsScreen(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.lock_outline),
-                  label: const Text('App Locks'),
+                child: _StatTile(
+                  icon: Icons.timer_outlined,
+                  value: '$activeMinutes',
+                  unit: 'min',
+                  label: 'Walking',
                 ),
               ),
             ],
           ),
-          if (_stepTrackingService.initializationError != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12.0),
-              decoration: BoxDecoration(
-                color: Colors.orange[50],
-                border: Border.all(color: Colors.orange[300]!),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Permission Needed',
-                    style: TextStyle(
-                      color: Colors.orange[900],
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Walkies needs Activity Recognition permission to keep your step progress accurate.',
-                    style: TextStyle(color: Colors.orange[800], fontSize: 13),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
+          const SizedBox(height: AppSpacing.gap),
+          AppCard(
+            color: AppPalette.sage,
+            borderColor: null,
+            shadow: false,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const IconBadge(
+                  Icons.lightbulb_outline_rounded,
+                  background: AppPalette.white,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange[700],
-                        ),
-                        onPressed: () async {
-                          final permissionsService = PermissionsService();
-                          await permissionsService.openAppSettings();
-                        },
-                        child: const Text(
-                          'Open Settings',
-                          style: TextStyle(color: Colors.white),
-                        ),
+                      Text(
+                        'Today\'s nudge',
+                        style: text.titleSmall!
+                            .copyWith(color: AppPalette.forestDeep),
                       ),
-                      const SizedBox(width: 8),
-                      OutlinedButton(
-                        onPressed: _loadData,
-                        child: const Text('Refresh'),
+                      const SizedBox(height: 4),
+                      Text(
+                        _nudge(goalMet, progress),
+                        style: text.bodyMedium!
+                            .copyWith(color: AppPalette.forestDeep),
                       ),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
+          const SizedBox(height: AppSpacing.gap),
+          WeeklyStreakWidget(
+            dailyGoalsMet: _dailyGoalsMet,
+            currentStreak: _currentStreak,
+          ),
+          const SizedBox(height: AppSpacing.gap),
+          AppCard(
+            padding: const EdgeInsets.fromLTRB(18, 16, 12, 16),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const AppLockSettingsScreen(),
+                ),
+              );
+            },
+            child: Row(
+              children: [
+                const IconBadge(
+                  Icons.lock_outline_rounded,
+                  background: AppPalette.terracottaSoft,
+                  foreground: Color(0xFF8A4318),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('App locks', style: text.titleMedium),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Choose which apps wait until you reach your goal',
+                        style: text.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: AppPalette.muted),
+              ],
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  static const _weekdays = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  ];
+  static const _months = [
+    'January', 'February', 'March', 'April', 'May', 'June', 'July',
+    'August', 'September', 'October', 'November', 'December',
+  ];
+
+  String _nudge(bool goalMet, double progress) {
+    if (goalMet) return 'Goal done. Anything extra today is a bonus for tomorrow\'s you.';
+    if (progress >= 0.8) return 'Nearly there. One short walk should do it.';
+    if (progress >= 0.5) return 'Over halfway. A lap of the block after your next meal keeps the momentum going.';
+    return 'A brisk 10-minute walk now makes a real dent in your goal.';
   }
 
   String _greeting() {
@@ -588,7 +487,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   String _userDisplayName() {
-    final email = Supabase.instance.client.auth.currentUser?.email;
+    final email = _supabaseService.currentUserEmail;
     if (email == null || email.isEmpty) {
       return 'there';
     }
@@ -599,44 +498,199 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
     return cleaned[0].toUpperCase() + cleaned.substring(1);
   }
+}
 
-  Widget _statCard(String label, String value, String unit) {
+class _StepsHero extends StatelessWidget {
+  final int steps;
+  final int goal;
+  final double progress;
+  final bool goalMet;
+
+  const _StepsHero({
+    required this.steps,
+    required this.goal,
+    required this.progress,
+    required this.goalMet,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final remaining = (goal - steps).clamp(0, goal);
+    final digits = steps.clamp(0, 99999).toString().padLeft(5, '0').split('');
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 22),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppPalette.forestSoft, AppPalette.forestDeep],
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x332D5A4A),
+            blurRadius: 30,
+            offset: Offset(0, 14),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.grey.shade500,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                value,
-                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
+                'TODAY\'S STEPS',
+                style: text.labelSmall!.copyWith(color: Colors.white70),
               ),
-              const SizedBox(width: 3),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 5),
-                child: Text(
-                  unit,
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                ),
+              const Spacer(),
+              goalMet
+                  ? const Pill(
+                      'Apps unlocked',
+                      icon: Icons.lock_open_rounded,
+                      background: AppPalette.sage,
+                    )
+                  : Pill(
+                      '${formatNumber(remaining)} to unlock',
+                      icon: Icons.lock_outline_rounded,
+                      background: AppPalette.terracottaSoft,
+                      foreground: const Color(0xFF8A4318),
+                    ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              for (var i = 0; i < digits.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                Expanded(child: _OdometerDigit(int.parse(digits[i]))),
+              ],
+            ],
+          ),
+          const SizedBox(height: 20),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 10,
+              color: goalMet ? AppPalette.sageDeep : AppPalette.terracotta,
+              backgroundColor: Colors.white.withValues(alpha: 0.16),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Text(
+                '${(progress * 100).round()}% of your goal',
+                style: text.labelMedium!.copyWith(color: Colors.white),
+              ),
+              const Spacer(),
+              Text(
+                'Goal ${formatNumber(goal)}',
+                style: text.labelMedium!.copyWith(color: Colors.white70),
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One wheel of the step counter, with the neighbouring digits faded
+class _OdometerDigit extends StatelessWidget {
+  final int digit;
+
+  const _OdometerDigit(this.digit);
+
+  @override
+  Widget build(BuildContext context) {
+    TextStyle faded(double size) => TextStyle(
+          fontFamily: 'Fraunces',
+          fontWeight: FontWeight.w500,
+          fontSize: size,
+          height: 1,
+          color: Colors.white.withValues(alpha: 0.28),
+        );
+    return Container(
+      height: 104,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white.withValues(alpha: 0.06),
+            Colors.white.withValues(alpha: 0.14),
+            Colors.white.withValues(alpha: 0.06),
+          ],
+        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          Text('${(digit + 9) % 10}', style: faded(14)),
+          Text(
+            '$digit',
+            style: const TextStyle(
+              fontFamily: 'Fraunces',
+              fontWeight: FontWeight.w600,
+              fontSize: 40,
+              height: 1,
+              color: Colors.white,
+            ),
+          ),
+          Text('${(digit + 1) % 10}', style: faded(14)),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String unit;
+  final String label;
+  final bool accent;
+
+  const _StatTile({
+    required this.icon,
+    required this.value,
+    required this.unit,
+    required this.label,
+    this.accent = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          IconBadge(
+            icon,
+            size: 32,
+            background: accent ? AppPalette.terracottaSoft : AppPalette.sage,
+            foreground: accent ? const Color(0xFF8A4318) : AppPalette.forest,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(value, style: text.headlineSmall),
+              const SizedBox(width: 3),
+              Text(unit, style: text.bodySmall),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(label, style: text.bodySmall),
         ],
       ),
     );

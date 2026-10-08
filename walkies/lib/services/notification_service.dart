@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:walkies/constants/app_constants.dart';
 
@@ -5,9 +6,17 @@ import 'package:walkies/constants/app_constants.dart';
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
 
-  factory NotificationService() {
-    return _instance;
-  }
+  factory NotificationService() => _override ?? _instance;
+
+  static NotificationService? _override;
+
+  /// Replace the shared instance. For tests and screenshot previews only.
+  @visibleForTesting
+  static set debugOverride(NotificationService? value) => _override = value;
+
+  /// For test fakes that subclass this service.
+  @visibleForTesting
+  NotificationService.forTesting();
 
   NotificationService._internal();
 

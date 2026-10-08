@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:walkies/constants/app_colors.dart';
+import 'package:walkies/theme/app_theme.dart';
+import 'package:walkies/widgets/ui.dart';
 import 'package:walkies/models/community.dart';
 import 'package:walkies/services/community_service.dart';
 
@@ -34,94 +35,116 @@ class PostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.border),
+    final text = Theme.of(context).textTheme;
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.fromLTRB(16, 14, 6, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              InitialAvatar(post.authorName, size: 38),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isMine ? '${post.authorName} (you)' : post.authorName,
+                      style: text.titleSmall,
+                    ),
+                    Text(
+                      '${timeAgo(post.createdAt)} ago'
+                      '${post.editedAt != null ? ' · edited' : ''}',
+                      style: text.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              ItemMenu(isMine: isMine, onSelected: onAction),
+            ],
+          ),
+          if (post.isHidden)
+            const Padding(
+              padding: EdgeInsets.only(top: 10, right: 10),
+              child: Pill(
+                'Hidden while a moderator reviews reports',
+                icon: Icons.visibility_off_outlined,
+                background: AppPalette.warnSoft,
+                foreground: AppPalette.warn,
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 12, 12, 10),
+            child: Text(
+              post.body,
+              style: text.bodyLarge!.copyWith(color: AppPalette.ink, height: 1.5),
+            ),
+          ),
+          Row(
+            children: [
+              _ActionChip(
+                icon: post.reactedByMe
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                label: post.reactionCount > 0 ? '${post.reactionCount}' : 'Support',
+                active: post.reactedByMe,
+                onTap: onToggleReaction,
+              ),
+              const SizedBox(width: 8),
+              _ActionChip(
+                icon: Icons.mode_comment_outlined,
+                label: post.commentCount > 0
+                    ? '${post.commentCount} ${post.commentCount == 1 ? 'reply' : 'replies'}'
+                    : 'Reply',
+                onTap: onTap,
+              ),
+            ],
+          ),
+        ],
       ),
-      clipBehavior: Clip.antiAlias,
+    );
+  }
+}
+
+class _ActionChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback? onTap;
+
+  const _ActionChip({
+    required this.icon,
+    required this.label,
+    this.active = false,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = active ? const Color(0xFFB4532A) : AppPalette.muted;
+    return Material(
+      color: active ? AppPalette.terracottaSoft : AppPalette.cream,
+      shape: const StadiumBorder(),
       child: InkWell(
+        customBorder: const StadiumBorder(),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 4, 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 14,
-                    backgroundColor: AppColors.sage,
-                    child: Text(
-                      post.authorName.isNotEmpty
-                          ? post.authorName[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                        color: AppColors.forest,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '${post.authorName} · ${timeAgo(post.createdAt)}'
-                      '${post.editedAt != null ? ' · edited' : ''}',
-                      style: const TextStyle(
-                        color: AppColors.muted,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  ItemMenu(isMine: isMine, onSelected: onAction),
-                ],
-              ),
-              if (post.isHidden)
-                const Padding(
-                  padding: EdgeInsets.only(top: 4),
-                  child: Text(
-                    'Hidden while a moderator reviews reports. Only you can see it.',
-                    style: TextStyle(fontSize: 12, color: AppColors.accent),
-                  ),
+              Icon(icon, size: 17, color: fg),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: fg,
                 ),
-              Padding(
-                padding: const EdgeInsets.only(top: 6, right: 10),
-                child: Text(
-                  post.body,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    height: 1.5,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: onToggleReaction,
-                    icon: Icon(
-                      post.reactedByMe ? Icons.favorite : Icons.favorite_border,
-                      size: 18,
-                      color: post.reactedByMe ? AppColors.accent : AppColors.muted,
-                    ),
-                    label: Text(
-                      post.reactionCount > 0 ? '${post.reactionCount}' : 'Support',
-                      style: const TextStyle(color: AppColors.muted),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: onTap,
-                    icon: const Icon(Icons.chat_bubble_outline,
-                        size: 18, color: AppColors.muted),
-                    label: Text(
-                      post.commentCount > 0 ? '${post.commentCount}' : 'Reply',
-                      style: const TextStyle(color: AppColors.muted),
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
@@ -140,7 +163,7 @@ class ItemMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<ItemAction>(
-      icon: const Icon(Icons.more_horiz, color: AppColors.muted),
+      icon: const Icon(Icons.more_horiz_rounded, color: AppPalette.muted),
       onSelected: onSelected,
       itemBuilder: (context) => isMine
           ? const [
@@ -169,10 +192,8 @@ Future<bool> showReportSheet(
         children: [
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Text(
-              'Why are you reporting this?',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
+            child: Text('Why are you reporting this?', style: TextStyle(
+              fontFamily: 'Fraunces', fontSize: 22, fontWeight: FontWeight.w600)),
           ),
           for (final entry in reportReasons.entries)
             ListTile(

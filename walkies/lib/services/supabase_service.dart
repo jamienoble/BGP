@@ -12,15 +12,25 @@ class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
   final NetworkService _networkService = NetworkService();
 
-  factory SupabaseService() {
-    return _instance;
-  }
+  factory SupabaseService() => _override ?? _instance;
+
+  static SupabaseService? _override;
+
+  /// Replace the shared instance. For tests and screenshot previews only.
+  @visibleForTesting
+  static set debugOverride(SupabaseService? value) => _override = value;
+
+  /// For test fakes that subclass this service.
+  @visibleForTesting
+  SupabaseService.forTesting();
 
   SupabaseService._internal();
 
   SupabaseClient get client => Supabase.instance.client;
 
   String? get currentUserId => client.auth.currentUser?.id;
+
+  String? get currentUserEmail => client.auth.currentUser?.email;
 
   /// Retry a future with exponential backoff on network errors
   Future<T> _retryWithBackoff<T>(

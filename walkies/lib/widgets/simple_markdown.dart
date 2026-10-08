@@ -60,26 +60,38 @@ class SimpleMarkdown extends StatelessWidget {
     );
   }
 
-  static const _bodyStyle =
-      TextStyle(fontSize: 16, height: 1.6, color: AppColors.bodyText);
+  static const _bodyStyle = TextStyle(
+      fontFamily: 'Inter', fontSize: 16.5, height: 1.65, color: AppColors.bodyText);
   static const _h1Style = TextStyle(
-      fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.forest);
+      fontFamily: 'Fraunces', fontSize: 26, height: 1.2, fontWeight: FontWeight.w600, color: AppColors.forest);
   static const _h2Style = TextStyle(
-      fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.forest);
+      fontFamily: 'Fraunces', fontSize: 22, height: 1.25, fontWeight: FontWeight.w600, color: AppColors.forest);
   static const _h3Style = TextStyle(
-      fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.forest);
+      fontFamily: 'Inter', fontSize: 17, height: 1.3, fontWeight: FontWeight.w700, color: AppColors.forest);
 
   Widget _textBlock(String text, TextStyle style) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
+        padding: EdgeInsets.only(
+          bottom: 14,
+          top: identical(style, _bodyStyle) ? 0 : 10,
+        ),
         child: Text.rich(TextSpan(style: style, children: _spans(text))),
       );
 
   Widget _listItem(String marker, String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 6, left: 4),
+        padding: const EdgeInsets.only(bottom: 8, left: 2),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(width: 22, child: Text(marker, style: _bodyStyle)),
+            SizedBox(
+              width: 24,
+              child: Text(
+                marker,
+                style: _bodyStyle.copyWith(
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
             Expanded(
               child: Text.rich(
                 TextSpan(style: _bodyStyle, children: _spans(text)),

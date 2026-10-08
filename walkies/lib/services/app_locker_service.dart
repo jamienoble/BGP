@@ -82,9 +82,17 @@ class AppLockerService {
     'com.instagram.barcelona',
   };
 
-  factory AppLockerService() {
-    return _instance;
-  }
+  factory AppLockerService() => _override ?? _instance;
+
+  static AppLockerService? _override;
+
+  /// Replace the shared instance. For tests and screenshot previews only.
+  @visibleForTesting
+  static set debugOverride(AppLockerService? value) => _override = value;
+
+  /// For test fakes that subclass this service.
+  @visibleForTesting
+  AppLockerService.forTesting();
 
   AppLockerService._internal();
 

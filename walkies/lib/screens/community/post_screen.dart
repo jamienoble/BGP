@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:walkies/constants/app_colors.dart';
+import 'package:walkies/theme/app_theme.dart';
+import 'package:walkies/widgets/ui.dart';
 import 'package:walkies/models/community.dart';
 import 'package:walkies/screens/community/community_widgets.dart';
 import 'package:walkies/services/community_service.dart';
@@ -58,9 +59,9 @@ class _PostScreenState extends State<PostScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not load replies.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Could not load replies.')));
     }
   }
 
@@ -90,7 +91,9 @@ class _PostScreenState extends State<PostScreen> {
       _feedChanged = true;
       await _load();
     } on CommunityRateLimitException {
-      _snack('You\'re replying very quickly. Please wait a while and try again.');
+      _snack(
+        'You\'re replying very quickly. Please wait a while and try again.',
+      );
     } catch (e) {
       _snack('Could not send your reply. Please try again.');
     } finally {
@@ -103,8 +106,11 @@ class _PostScreenState extends State<PostScreen> {
       case ItemAction.report:
         await showReportSheet(context, postId: _post.id);
       case ItemAction.block:
-        if (await confirmBlock(context,
-                userId: _post.authorId, name: _post.authorName) &&
+        if (await confirmBlock(
+              context,
+              userId: _post.authorId,
+              name: _post.authorName,
+            ) &&
             mounted) {
           Navigator.of(context).pop(true);
         }
@@ -119,13 +125,19 @@ class _PostScreenState extends State<PostScreen> {
     }
   }
 
-  Future<void> _onCommentAction(CommunityComment comment, ItemAction action) async {
+  Future<void> _onCommentAction(
+    CommunityComment comment,
+    ItemAction action,
+  ) async {
     switch (action) {
       case ItemAction.report:
         await showReportSheet(context, commentId: comment.id);
       case ItemAction.block:
-        if (await confirmBlock(context,
-            userId: comment.authorId, name: comment.authorName)) {
+        if (await confirmBlock(
+          context,
+          userId: comment.authorId,
+          name: comment.authorName,
+        )) {
           _feedChanged = true;
           await _load();
         }
@@ -162,7 +174,7 @@ class _PostScreenState extends State<PostScreen> {
               child: RefreshIndicator(
                 onRefresh: _load,
                 child: ListView(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
                   children: [
                     PostCard(
                       post: _post,
@@ -170,18 +182,22 @@ class _PostScreenState extends State<PostScreen> {
                       onToggleReaction: _toggleReaction,
                       onAction: _onPostAction,
                     ),
+                    const SizedBox(height: 20),
+                    SectionLabel(
+                      _comments.isEmpty
+                          ? 'Replies'
+                          : '${_comments.length} ${_comments.length == 1 ? 'reply' : 'replies'}',
+                    ),
                     if (_isLoading)
                       const Padding(
                         padding: EdgeInsets.all(24),
                         child: Center(child: CircularProgressIndicator()),
                       )
                     else if (_comments.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Center(
-                          child: Text('No replies yet.',
-                              style: TextStyle(color: AppColors.muted)),
-                        ),
+                      const EmptyState(
+                        icon: Icons.mode_comment_outlined,
+                        title: 'No replies yet',
+                        message: 'Say something kind to get things going.',
                       )
                     else
                       for (final c in _comments)
@@ -195,38 +211,67 @@ class _PostScreenState extends State<PostScreen> {
               ),
             ),
             if (widget.canComment)
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 4, 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _replyController,
-                          minLines: 1,
-                          maxLines: 4,
-                          maxLength: 2000,
-                          textCapitalization: TextCapitalization.sentences,
-                          decoration: const InputDecoration(
-                            hintText: 'Write a reply',
-                            counterText: '',
-                            border: OutlineInputBorder(),
-                            isDense: true,
+              Container(
+                decoration: const BoxDecoration(
+                  color: AppPalette.white,
+                  border: Border(top: BorderSide(color: AppPalette.line)),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _replyController,
+                            minLines: 1,
+                            maxLines: 4,
+                            maxLength: 2000,
+                            textCapitalization: TextCapitalization.sentences,
+                            decoration: InputDecoration(
+                              hintText: 'Write a supportive reply',
+                              counterText: '',
+                              isDense: true,
+                              fillColor: AppPalette.cream,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: const BorderSide(
+                                  color: AppPalette.forest,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                      IconButton(
-                        onPressed: _isSending ? null : _sendReply,
-                        icon: _isSending
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.send, color: AppColors.forest),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        IconButton.filled(
+                          onPressed: _isSending ? null : _sendReply,
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppPalette.forest,
+                            foregroundColor: Colors.white,
+                            fixedSize: const Size(46, 46),
+                          ),
+                          icon: _isSending
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.arrow_upward_rounded),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -250,39 +295,69 @@ class _CommentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8, left: 16),
-      padding: const EdgeInsets.fromLTRB(12, 6, 0, 10),
-      decoration: BoxDecoration(
-        color: AppColors.sand,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${comment.authorName} · ${timeAgo(comment.createdAt)}',
-                  style: const TextStyle(
-                    color: AppColors.muted,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
+          InitialAvatar(comment.authorName, size: 32),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(14, 8, 2, 12),
+              decoration: BoxDecoration(
+                color: isMine ? AppPalette.sage : AppPalette.white,
+                border: isMine ? null : Border.all(color: AppPalette.line),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(4),
+                  topRight: Radius.circular(18),
+                  bottomLeft: Radius.circular(18),
+                  bottomRight: Radius.circular(18),
                 ),
               ),
-              ItemMenu(isMine: isMine, onSelected: onAction),
-            ],
-          ),
-          if (comment.isHidden)
-            const Text(
-              'Hidden while a moderator reviews reports. Only you can see it.',
-              style: TextStyle(fontSize: 12, color: AppColors.accent),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: isMine ? 'You' : comment.authorName,
+                                style: text.titleSmall,
+                              ),
+                              TextSpan(
+                                text: '  ${timeAgo(comment.createdAt)} ago',
+                                style: text.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        height: 32,
+                        child: ItemMenu(isMine: isMine, onSelected: onAction),
+                      ),
+                    ],
+                  ),
+                  if (comment.isHidden)
+                    Text(
+                      'Hidden while a moderator reviews reports.',
+                      style: text.bodySmall!.copyWith(color: AppPalette.warn),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Text(
+                      comment.body,
+                      style: text.bodyMedium!.copyWith(color: AppPalette.ink),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Text(comment.body, style: const TextStyle(height: 1.45)),
           ),
         ],
       ),
