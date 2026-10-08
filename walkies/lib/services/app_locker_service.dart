@@ -2,6 +2,7 @@ import 'package:device_apps/device_apps.dart';
 import 'package:flutter/services.dart';
 import 'package:walkies/models/app_lock.dart';
 import 'package:walkies/services/supabase_service.dart';
+import 'package:walkies/utils/date_utils.dart' as date_utils;
 
 class AppLockerService {
   static final AppLockerService _instance = AppLockerService._internal();
@@ -153,6 +154,7 @@ class AppLockerService {
       await platform.invokeMethod<bool>('syncStepGoalData', {
         'dailyGoal': dailyGoal,
         'todaySteps': todaySteps,
+        'date': date_utils.DateUtils.todayDateString(),
       });
     } catch (_) {
       // Ignore if native bridge is temporarily unavailable.

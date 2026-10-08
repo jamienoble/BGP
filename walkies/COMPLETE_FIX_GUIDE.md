@@ -42,7 +42,7 @@
 - [android/app/src/main/res/xml/accessibility_service_config.xml](android/app/src/main/res/xml/accessibility_service_config.xml) - **NEW** service configuration
 - [android/app/src/main/res/values/strings.xml](android/app/src/main/res/values/strings.xml) - **NEW** resource strings
 - [android/app/src/main/kotlin/com/example/walkies/MainActivity.kt](android/app/src/main/kotlin/com/example/walkies/MainActivity.kt) - Added method channel handler
-- [lib/services/app_locking_service.dart](lib/services/app_locking_service.dart) - Enhanced with accessibility service control
+- [lib/services/app_locker_service.dart](lib/services/app_locker_service.dart) - Enhanced with accessibility service control
 - [lib/screens/app_lock_settings_screen.dart](lib/screens/app_lock_settings_screen.dart) - Shows service status + enable prompt
 
 ---

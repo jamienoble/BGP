@@ -10,6 +10,8 @@ class AppConstants {
   static const String prefStepBaselineValue = 'step_baseline_value';
   static const String prefStepBaselineDate = 'step_baseline_date';
   static const String prefStepAppInstallBaseline = 'step_app_install_baseline';
+  static const String prefStepCarried = 'step_carried';
+  static const String prefStepLastRaw = 'step_last_raw';
   static const String prefTodaySteps = 'today_steps';
   static const String prefDailyGoal = 'daily_goal';
 
@@ -17,7 +19,8 @@ class AppConstants {
   static const String prefStreakDaysMet = 'streak_days_met_v1';
   static const String prefStreakCurrent = 'streak_current_v1';
   static const String prefStreakResetDate = 'streak_reset_date_v1';
-  static const String prefLastNotificationResetDate = 'last_notification_reset_date';
+  static const String prefGoalNearNotifiedDate = 'goal_near_notified_date';
+  static const String prefGoalCompletedNotifiedDate = 'goal_completed_notified_date';
 
   // Notification channel
   static const String notificationChannelId = 'walkies_channel';

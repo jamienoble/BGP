@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:walkies/services/app_locker_service.dart';
+import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/constants/app_constants.dart';
 import 'package:walkies/utils/date_utils.dart' as date_utils;
@@ -64,6 +66,11 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
       await _supabaseService.createOrUpdateStepGoal(newGoal);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(AppConstants.prefDailyGoal, newGoal);
+      // Push the new goal to the app blocker straight away
+      await AppLockerService().syncNativeStepGoalPrefs(
+        dailyGoal: newGoal,
+        todaySteps: StepTrackingService().todaySteps,
+      );
       if (resetStreak) {
         await _resetStreak();
       }

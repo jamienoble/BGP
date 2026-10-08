@@ -25,7 +25,8 @@ class StepTrackingService {
   // Baseline tracking for daily reset
   int _pedometerBaseline = 0; // Raw pedometer value at start of today
   String _baselineDate = ''; // Date when baseline was captured (yyyy-MM-dd)
-  int _todaySteps = 0; // Today's step count (delta from baseline)
+  int _todaySteps = 0; // Today's step count
+  int _carriedSteps = 0; // Steps counted today before the sensor last restarted (reboot)
 
   // Sensor data filtering
   int _lastRawSteps = 0; // Previous raw pedometer reading
@@ -60,14 +61,19 @@ class StepTrackingService {
       final savedDate = prefs.getString(AppConstants.prefStepBaselineDate) ?? '';
 
       if (savedDate == todayDate) {
-        // Same day — restore saved baseline
+        // Same day — restore saved baseline and progress
         _pedometerBaseline =
             prefs.getInt(AppConstants.prefStepBaselineValue) ?? 0;
+        _carriedSteps = prefs.getInt(AppConstants.prefStepCarried) ?? 0;
+        _lastRawSteps = prefs.getInt(AppConstants.prefStepLastRaw) ?? 0;
+        _todaySteps = prefs.getInt(AppConstants.prefTodaySteps) ?? 0;
         _baselineDate = savedDate;
       } else {
         // New day — mark that we need to capture baseline on first step event
         _baselineDate = ''; // Signal that baseline needs to be set
         _pedometerBaseline = 0;
+        _carriedSteps = 0;
+        _todaySteps = 0;
       }
 
       Pedometer.stepCountStream.listen(
@@ -100,6 +106,12 @@ class StepTrackingService {
       return;
     }
 
+    // Step counter went backwards: the device restarted and the sensor's
+    // since-boot count began again. Keep today's progress and rebase.
+    if (rawSteps < _lastRawSteps || rawSteps < _pedometerBaseline) {
+      _handleSensorRestart(prefs, rawSteps, now);
+    }
+
     // Apply sensor filtering to detect and reject noisy spikes
     if (!_shouldProcessStepEvent(rawSteps, now)) {
       return;
@@ -110,6 +122,7 @@ class StepTrackingService {
 
     // Persist locally and to cloud
     await prefs.setInt(AppConstants.prefTodaySteps, _todaySteps);
+    await prefs.setInt(AppConstants.prefStepLastRaw, _lastRawSteps);
     await _syncToSupabase();
   }
 
@@ -133,12 +146,31 @@ class StepTrackingService {
   ) {
     _pedometerBaseline = rawSteps;
     _baselineDate = todayDate;
+    _carriedSteps = 0;
+    _todaySteps = 0;
     prefs.setInt(AppConstants.prefStepBaselineValue, _pedometerBaseline);
     prefs.setString(AppConstants.prefStepBaselineDate, _baselineDate);
+    prefs.setInt(AppConstants.prefStepCarried, 0);
+    prefs.setInt(AppConstants.prefStepLastRaw, rawSteps);
     _lastRawSteps = rawSteps;
     _lastStepEventAt = now;
     _todayStepsController.add(0);
     prefs.setInt(AppConstants.prefTodaySteps, 0);
+  }
+
+  /// Rebase after the sensor's count restarts, carrying today's steps over
+  void _handleSensorRestart(
+    SharedPreferences prefs,
+    int rawSteps,
+    DateTime now,
+  ) {
+    _carriedSteps = _todaySteps;
+    _pedometerBaseline = rawSteps;
+    _lastRawSteps = rawSteps;
+    _lastStepEventAt = now;
+    prefs.setInt(AppConstants.prefStepBaselineValue, _pedometerBaseline);
+    prefs.setInt(AppConstants.prefStepCarried, _carriedSteps);
+    prefs.setInt(AppConstants.prefStepLastRaw, rawSteps);
   }
 
   /// Check if step event should be processed or filtered out as noise
@@ -168,8 +200,8 @@ class StepTrackingService {
   void _updateTodaySteps(int rawSteps) {
     _lastRawSteps = rawSteps;
     _lastStepEventAt = DateTime.now();
-    _todaySteps =
-        (rawSteps - _pedometerBaseline).clamp(0, AppConstants.maxStepsValue);
+    _todaySteps = (_carriedSteps + rawSteps - _pedometerBaseline)
+        .clamp(0, AppConstants.maxStepsValue);
     _todayStepsController.add(_todaySteps);
   }
 
@@ -185,7 +217,10 @@ class StepTrackingService {
   /// Stream of today's step count (delta from start of day)
   Stream<int> get todayStepsStream => _todayStepsController.stream;
 
-  int get todaySteps => _todaySteps;
+  /// Today's steps; 0 if the stored count belongs to an earlier day and no
+  /// step event has arrived yet today.
+  int get todaySteps =>
+      _baselineDate == date_utils.DateUtils.todayDateString() ? _todaySteps : 0;
 
   bool get isInitialized => _isInitialized;
 

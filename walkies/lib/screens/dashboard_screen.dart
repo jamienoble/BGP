@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:walkies/models/step_goal.dart';
@@ -36,7 +37,6 @@ class _DashboardScreenState extends State<DashboardScreen>
   // Streak tracking
   Map<DateTime, bool> _dailyGoalsMet = {};
   int _currentStreak = 0;
-  bool _goalNotificationSent = false;
 
   @override
   void initState() {
@@ -60,18 +60,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  /// Reset the notification flag if it's a new day
-  Future<void> _resetNotificationFlagIfNewDay() async {
-    final prefs = await SharedPreferences.getInstance();
-    final today = date_utils.DateUtils.todayDateString();
-    final lastResetDate = prefs.getString(AppConstants.prefLastNotificationResetDate);
-
-    if (lastResetDate != today) {
-      _goalNotificationSent = false;
-      await prefs.setString(AppConstants.prefLastNotificationResetDate, today);
-    }
-  }
-
   /// Initialize notification service and load daily streak data
   Future<void> _initializeNotifications() async {
     try {
@@ -88,20 +76,28 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (goalSteps <= 0) return;
 
     final progress = (currentSteps / goalSteps) * 100;
+    final prefs = await SharedPreferences.getInstance();
+    final today = date_utils.DateUtils.todayDateString();
 
-    // Send notification when reaching ~80% of goal
-    if (progress >= AppConstants.notificationThresholdPercent && !_goalNotificationSent) {
-      _goalNotificationSent = true;
+    // Goal completed: notify once per day
+    if (currentSteps >= goalSteps) {
+      if (prefs.getString(AppConstants.prefGoalCompletedNotifiedDate) != today) {
+        await prefs.setString(AppConstants.prefGoalCompletedNotifiedDate, today);
+        await prefs.setString(AppConstants.prefGoalNearNotifiedDate, today);
+        await _notificationService.sendGoalCompletedNotification();
+      }
+      return;
+    }
+
+    // Reached ~80% of goal: notify once per day
+    if (progress >= AppConstants.notificationThresholdPercent &&
+        prefs.getString(AppConstants.prefGoalNearNotifiedDate) != today) {
+      await prefs.setString(AppConstants.prefGoalNearNotifiedDate, today);
       await _notificationService.sendGoalNearCompletionNotification(
         currentSteps: currentSteps,
         goalSteps: goalSteps,
-        stepsRemaining: (goalSteps - currentSteps).clamp(0, goalSteps),
+        stepsRemaining: goalSteps - currentSteps,
       );
-    }
-
-    // Send notification when goal is completed
-    if (currentSteps >= goalSteps) {
-      await _notificationService.sendGoalCompletedNotification();
     }
   }
 
@@ -206,9 +202,6 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<void> _loadData() async {
     try {
-      // Reset notification flag if it's a new day
-      await _resetNotificationFlagIfNewDay();
-
       // Initialize step tracking (requests permission internally if needed)
       await _stepTrackingService.initialize();
 
@@ -219,9 +212,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (mounted) {
         setState(() {
           _stepGoal = goal;
-          _currentSteps = _stepTrackingService.todaySteps > 0
-              ? _stepTrackingService.todaySteps
-              : (today?.steps ?? 0);
+          // Take whichever is further along: the local count or the last cloud sync
+          _currentSteps = max(_stepTrackingService.todaySteps, today?.steps ?? 0);
           _isLoading = false;
         });
         // Persist goal and steps to prefs for accessibility service
@@ -236,7 +228,12 @@ class _DashboardScreenState extends State<DashboardScreen>
         await _loadDailyGoalsMet();
       }
 
-      // Listen to live step updates (today's delta, not raw lifetime count)
+      // Rebuild the native locked-app list from the cloud on every load
+      await _appLockerService.syncLockedAppsToAccessibilityService();
+
+      // Listen to live step updates (today's delta, not raw lifetime count).
+      // _loadData runs on every resume, so drop the previous listener first.
+      await _stepSubscription?.cancel();
       _stepSubscription = _stepTrackingService.todayStepsStream.listen((
         steps,
       ) async {
@@ -288,7 +285,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final goalSteps = _stepGoal?.dailySteps ?? 0;
+    final goalSteps = _stepGoal?.dailySteps ?? AppConstants.defaultDailyStepGoal;
     final progress = goalSteps > 0 ? _currentSteps / goalSteps : 0.0;
     final goalMet = _currentSteps >= goalSteps;
 

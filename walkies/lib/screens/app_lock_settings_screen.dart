@@ -1,10 +1,14 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:device_apps/device_apps.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkies/services/app_locker_service.dart';
+import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/services/supabase_service.dart';
+import 'package:walkies/constants/app_constants.dart';
+import 'package:walkies/utils/date_utils.dart' as date_utils;
 
 class AppLockSettingsScreen extends StatefulWidget {
   const AppLockSettingsScreen({Key? key}) : super(key: key);
@@ -23,6 +27,7 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
   final Set<String> _savingPackages = {};
   bool _isLoading = true;
   bool _isAccessibilityServiceEnabled = false;
+  bool _goalMetToday = false;
 
   @override
   void initState() {
@@ -46,11 +51,11 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
 
   Future<void> _resetStreak() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('streak_days_met_v1', jsonEncode(<String, bool>{}));
-    await prefs.setInt('streak_current_v1', 0);
+    await prefs.setString(AppConstants.prefStreakDaysMet, jsonEncode(<String, bool>{}));
+    await prefs.setInt(AppConstants.prefStreakCurrent, 0);
     await prefs.setString(
-      'streak_reset_date_v1',
-      DateTime.now().toIso8601String().split('T')[0],
+      AppConstants.prefStreakResetDate,
+      date_utils.DateUtils.todayDateString(),
     );
   }
 
@@ -64,16 +69,23 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
       final stepGoal = await _supabaseService.getStepGoal();
       final todaySteps = await _supabaseService.getTodaySteps();
 
+      final dailyGoal = stepGoal?.dailySteps ?? AppConstants.defaultDailyStepGoal;
+      // The cloud count can lag the local one (e.g. after an offline sync),
+      // so never send a lower value than the local tracker has
+      final steps = max(StepTrackingService().todaySteps, todaySteps?.steps ?? 0);
+
       await _appLockerService.syncNativeStepGoalPrefs(
-        dailyGoal: stepGoal?.dailySteps ?? 7000,
-        todaySteps: todaySteps?.steps ?? 0,
+        dailyGoal: dailyGoal,
+        todaySteps: steps,
       );
       await _appLockerService.syncLockedAppsToAccessibilityService();
 
+      if (!mounted) return;
       setState(() {
         _installedApps = apps;
         _lockedAppIds = lockedIds;
         _isAccessibilityServiceEnabled = isServiceEnabled;
+        _goalMetToday = steps >= dailyGoal;
         _isLoading = false;
       });
     } catch (e) {
@@ -84,9 +96,11 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
           ),
         );
       }
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -128,7 +142,9 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
     final packageName = app.packageName;
     final isCurrentlyLocked = _lockedAppIds?.contains(packageName) ?? false;
     if (_savingPackages.contains(packageName)) return;
-    if (isCurrentlyLocked) {
+    // Removing a lock only costs the streak while it is still enforcing today
+    final resetsStreak = isCurrentlyLocked && !_goalMetToday;
+    if (resetsStreak) {
       final shouldUnlock = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -171,11 +187,17 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
           (lock) => lock.appPackageName == packageName,
         );
         await _appLockerService.unlockApp(appLock.id);
-        await _resetStreak();
+        if (resetsStreak) {
+          await _resetStreak();
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('App unlocked. Your streak has been reset.'),
+            SnackBar(
+              content: Text(
+                resetsStreak
+                    ? 'App unlocked. Your streak has been reset.'
+                    : 'App unlocked.',
+              ),
             ),
           );
         }

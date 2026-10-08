@@ -33,13 +33,11 @@ class MainActivity : FlutterActivity() {
             result.success(true)
           }
           "syncStepGoalData" -> {
-            val dailyGoal = call.argument<Int>("dailyGoal") ?: 7000
+            val dailyGoal = call.argument<Int>("dailyGoal") ?: StepStore.DEFAULT_DAILY_GOAL
             val todaySteps = call.argument<Int>("todaySteps") ?: 0
-            val prefs = getSharedPreferences("step_prefs", Context.MODE_PRIVATE)
-            prefs.edit()
-              .putInt("daily_goal", dailyGoal)
-              .putInt("today_steps", todaySteps)
-              .apply()
+            val date = call.argument<String>("date") ?: StepStore.todayString()
+            StepStore.setDailyGoal(this, dailyGoal)
+            StepStore.recordFlutterSteps(this, todaySteps, date)
             result.success(true)
           }
           "isAppLockingEnabled" -> {
