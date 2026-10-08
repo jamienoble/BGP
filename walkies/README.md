@@ -48,7 +48,8 @@ lib/
 1. Create a new Supabase project
 2. Go to SQL Editor
 3. Run the SQL from `SUPABASE_SCHEMA.sql` to create tables and policies
-4. Copy your Project URL and Anon Key from Settings > API
+4. Run `SUPABASE_DELETE_ACCOUNT.sql` to enable in-app account deletion
+5. Copy your Project URL and Anon Key from Settings > API
 
 ### 3. **Configure App**
 Edit `lib/main.dart` and add your Supabase credentials:

@@ -36,7 +36,7 @@ class NetworkService {
   String getNetworkErrorMessage(dynamic exception) {
     final errorString = exception.toString().toLowerCase();
 
-    if (errorString.contains('sockexception') || 
+    if (errorString.contains('socketexception') ||
         errorString.contains('failed host lookup') ||
         errorString.contains('network unreachable')) {
       return 'Network connection failed. Please check your internet connection and try again.';
@@ -61,7 +61,7 @@ class NetworkService {
   /// Determines if an exception is network-related
   bool isNetworkError(dynamic exception) {
     final errorString = exception.toString().toLowerCase();
-    return errorString.contains('sockexception') ||
+    return errorString.contains('socketexception') ||
         errorString.contains('failed host lookup') ||
         errorString.contains('timeout') ||
         errorString.contains('connection') ||

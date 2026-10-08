@@ -6,6 +6,7 @@ import 'package:walkies/models/step_goal.dart';
 import 'package:walkies/models/user.dart';
 import 'package:walkies/services/network_service.dart';
 import 'package:walkies/constants/app_constants.dart';
+import 'package:walkies/utils/date_utils.dart' as date_utils;
 
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
@@ -48,7 +49,7 @@ class SupabaseService {
         final delay =
             AppConstants.retryInitialDelay * (1 << (retryCount - 1));
 
-        print(
+        debugPrint(
           'Network error in $operationName. Retrying in ${delay.inMilliseconds}ms... '
           '(Attempt $retryCount/${AppConstants.maxRetries})',
         );
@@ -91,6 +92,29 @@ class SupabaseService {
     await client.auth.signOut();
   }
 
+  /// Email a password reset link that opens the app
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _retryWithBackoff(
+      () => client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: kIsWeb ? null : AppConstants.deepLinkCallbackUrl,
+      ),
+      operationName: 'Password reset',
+    );
+  }
+
+  /// Set a new password for the signed-in user (after a reset link)
+  Future<void> updatePassword(String newPassword) async {
+    await client.auth.updateUser(UserAttributes(password: newPassword));
+  }
+
+  /// Permanently delete the signed-in user's account and all their data.
+  /// Requires the `delete_user` function from SUPABASE_SCHEMA.sql.
+  Future<void> deleteAccount() async {
+    await client.rpc('delete_user');
+    await client.auth.signOut();
+  }
+
   // ==================== Step Goals ====================
   Future<StepGoal?> getStepGoal() async {
     final userId = currentUserId;
@@ -109,26 +133,16 @@ class SupabaseService {
     final userId = currentUserId;
     if (userId == null) throw Exception('User not authenticated');
 
-    final existing = await getStepGoal();
+    final response = await client
+        .from('step_goals')
+        .upsert(
+          {'user_id': userId, 'daily_steps': dailySteps},
+          onConflict: 'user_id',
+        )
+        .select()
+        .single();
 
-    if (existing != null) {
-      final response = await client
-          .from('step_goals')
-          .update({'daily_steps': dailySteps})
-          .eq('user_id', userId)
-          .select()
-          .single();
-
-      return StepGoal.fromJson(response);
-    } else {
-      final response = await client
-          .from('step_goals')
-          .insert({'user_id': userId, 'daily_steps': dailySteps})
-          .select()
-          .single();
-
-      return StepGoal.fromJson(response);
-    }
+    return StepGoal.fromJson(response);
   }
 
   // ==================== App Locks ====================
@@ -188,50 +202,23 @@ class SupabaseService {
     final userId = currentUserId;
     if (userId == null) return null;
 
-    final today = DateTime.now();
-    final dateStr = today.toIso8601String().split('T')[0];
-
-    final response = await client
-        .from('daily_steps')
-        .select()
-        .eq('user_id', userId)
-        .eq('date', dateStr)
-        .maybeSingle();
-
-    return response != null ? DailySteps.fromJson(response) : null;
+    return getTodayStepsForDate(date_utils.DateUtils.todayDateString());
   }
 
-  Future<DailySteps> upsertTodaySteps(int steps) async {
+  /// Save today's steps in one request (insert or update on the
+  /// user/date unique key)
+  Future<void> upsertTodaySteps(int steps) async {
     final userId = currentUserId;
     if (userId == null) throw Exception('User not authenticated');
 
-    final today = DateTime.now();
-    final dateStr = today.toIso8601String().split('T')[0];
-
-    final existing = await getTodaySteps();
-
-    if (existing != null) {
-      final response = await client
-          .from('daily_steps')
-          .update({'steps': steps})
-          .eq('id', existing.id)
-          .select()
-          .single();
-
-      return DailySteps.fromJson(response);
-    } else {
-      final response = await client
-          .from('daily_steps')
-          .insert({
-            'user_id': userId,
-            'steps': steps,
-            'date': dateStr,
-          })
-          .select()
-          .single();
-
-      return DailySteps.fromJson(response);
-    }
+    await client.from('daily_steps').upsert(
+      {
+        'user_id': userId,
+        'steps': steps,
+        'date': date_utils.DateUtils.todayDateString(),
+      },
+      onConflict: 'user_id,date',
+    );
   }
 
   /// Get daily steps for a specific date (format: yyyy-MM-dd)
@@ -259,7 +246,7 @@ class SupabaseService {
         .from('daily_steps')
         .select()
         .eq('user_id', userId)
-        .gte('date', startDate.toIso8601String().split('T')[0])
+        .gte('date', date_utils.DateUtils.todayDateString(dateTime: startDate))
         .order('date', ascending: false);
 
     return (response as List)

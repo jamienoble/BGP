@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkies/services/app_locker_service.dart';
+import 'package:walkies/services/goal_rules.dart';
 import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/constants/app_constants.dart';
@@ -63,12 +64,17 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
     });
 
     try {
+      final previousGoal = _currentGoal;
       await _supabaseService.createOrUpdateStepGoal(newGoal);
+      if (previousGoal != null && newGoal < previousGoal) {
+        await GoalRules.holdForToday(previousGoal);
+      }
+      final todayGoal = await GoalRules.effectiveGoal(newGoal);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(AppConstants.prefDailyGoal, newGoal);
-      // Push the new goal to the app blocker straight away
+      await prefs.setInt(AppConstants.prefDailyGoal, todayGoal);
+      // Push today's goal to the app blocker straight away
       await AppLockerService().syncNativeStepGoalPrefs(
-        dailyGoal: newGoal,
+        dailyGoal: todayGoal,
         todaySteps: StepTrackingService().todaySteps,
       );
       if (resetStreak) {
@@ -79,7 +85,7 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
           SnackBar(
             content: Text(
               resetStreak
-                  ? 'Goal updated. Your streak has been reset.'
+                  ? 'New goal starts tomorrow. Your streak has been reset.'
                   : 'Goal updated successfully',
             ),
           ),
@@ -116,10 +122,11 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
       final shouldReset = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Reset streak?'),
+          title: const Text('Lower your goal?'),
           content: Text(
-            'Reducing your goal from ${_currentGoal!} to $newGoal '
-            'will reset your streak to 0. Continue?',
+            'Your new goal of $newGoal steps starts tomorrow. '
+            'Today\'s goal stays at ${_currentGoal!} steps.\n\n'
+            'Lowering your goal also resets your streak to 0. Continue?',
           ),
           actions: [
             TextButton(

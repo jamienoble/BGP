@@ -1,8 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:provider/provider.dart';
 import 'package:walkies/services/supabase_service.dart';
-import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/screens/login_screen.dart';
 import 'package:walkies/screens/dashboard_screen.dart';
 
@@ -24,36 +24,104 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        Provider<SupabaseService>(create: (_) => SupabaseService()),
-        Provider<StepTrackingService>(create: (_) => StepTrackingService()),
-      ],
-      child: MaterialApp(
-        title: 'Walkies - App Locker',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-          useMaterial3: true,
-        ),
-        home: const _AuthWrapper(),
-        routes: {
-          '/login': (_) => const LoginScreen(),
-          '/dashboard': (_) => const DashboardScreen(),
-        },
+    return MaterialApp(
+      title: 'Walkies - App Locker',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
       ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      // Login vs dashboard is decided only by the auth state below, so
+      // screens never navigate between the two themselves
+      home: const _AuthWrapper(),
     );
   }
 }
 
-class _AuthWrapper extends StatelessWidget {
+class _AuthWrapper extends StatefulWidget {
   const _AuthWrapper();
 
   @override
+  State<_AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<_AuthWrapper> {
+  final _supabaseService = SupabaseService();
+  StreamSubscription<AuthState>? _recoverySubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    // A password reset link signs the user in with a recovery session;
+    // ask for the new password straight away
+    _recoverySubscription =
+        _supabaseService.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.passwordRecovery && mounted) {
+        _showSetPasswordDialog();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _recoverySubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _showSetPasswordDialog() async {
+    final controller = TextEditingController();
+    final newPassword = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Set a new password'),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'New password'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (newPassword == null || newPassword.isEmpty) return;
+
+    try {
+      await _supabaseService.updatePassword(newPassword);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password updated')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update password. Please try again.'),
+        ),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final supabaseService = SupabaseService();
-    
     return StreamBuilder<AuthState>(
-      stream: supabaseService.client.auth.onAuthStateChange,
+      stream: _supabaseService.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(

@@ -28,6 +28,11 @@ class StepTrackingService {
   int _todaySteps = 0; // Today's step count
   int _carriedSteps = 0; // Steps counted today before the sensor last restarted (reboot)
 
+  // Cloud sync throttling: steps are saved at most once per interval,
+  // plus whenever the app goes to the background
+  DateTime? _lastCloudSyncAt;
+  int? _lastSyncedSteps;
+
   // Sensor data filtering
   int _lastRawSteps = 0; // Previous raw pedometer reading
   DateTime? _lastStepEventAt; // Timestamp of previous event
@@ -123,7 +128,11 @@ class StepTrackingService {
     // Persist locally and to cloud
     await prefs.setInt(AppConstants.prefTodaySteps, _todaySteps);
     await prefs.setInt(AppConstants.prefStepLastRaw, _lastRawSteps);
-    await _syncToSupabase();
+    final lastSync = _lastCloudSyncAt;
+    if (lastSync == null ||
+        now.difference(lastSync) >= AppConstants.cloudSyncInterval) {
+      await _syncToSupabase();
+    }
   }
 
   /// Record the pedometer value on very first app launch
@@ -207,11 +216,21 @@ class StepTrackingService {
 
   /// Sync today's step count to Supabase
   Future<void> _syncToSupabase() async {
+    _lastCloudSyncAt = DateTime.now();
+    final steps = todaySteps;
     try {
-      await _supabaseService.upsertTodaySteps(_todaySteps);
+      await _supabaseService.upsertTodaySteps(steps);
+      _lastSyncedSteps = steps;
     } catch (_) {
-      // Silently ignore sync errors (e.g., offline)
+      // Ignore sync errors (e.g., offline); retried on the next interval
     }
+  }
+
+  /// Save any unsynced steps now (call when the app goes to the background)
+  Future<void> flushToCloud() async {
+    if (!_isInitialized || _baselineDate.isEmpty) return;
+    if (todaySteps == _lastSyncedSteps) return;
+    await _syncToSupabase();
   }
 
   /// Stream of today's step count (delta from start of day)

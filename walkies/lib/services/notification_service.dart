@@ -1,7 +1,7 @@
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:walkies/constants/app_constants.dart';
 
+/// Local notifications for goal progress. No push service is used.
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
 
@@ -11,39 +11,13 @@ class NotificationService {
 
   NotificationService._internal();
 
-  FirebaseMessaging? _firebaseMessaging;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
+  bool _initialized = false;
 
   Future<void> initialize() async {
-    // Skip Firebase initialization on web (not needed for this app)
-    if (kIsWeb) {
-      await _initializeLocalNotifications();
-      return;
-    }
+    if (_initialized) return;
 
-    // Request notification permissions (mobile only)
-    _firebaseMessaging = FirebaseMessaging.instance;
-
-    await _firebaseMessaging!.requestPermission(
-      alert: true,
-      announcement: true,
-      badge: true,
-      sound: true,
-    );
-
-    await _initializeLocalNotifications();
-
-    // Handle foreground messages
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      _handleMessage(message);
-    });
-
-    // Handle background message
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  }
-
-  Future<void> _initializeLocalNotifications() async {
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
     const DarwinInitializationSettings iOSSettings =
@@ -55,34 +29,23 @@ class NotificationService {
     );
 
     await _localNotifications.initialize(settings: initSettings);
+    _initialized = true;
   }
 
-  static Future<void> _firebaseMessagingBackgroundHandler(
-    RemoteMessage message,
-  ) async {
-    print('Handling background message: ${message.messageId}');
-  }
-
-  void _handleMessage(RemoteMessage message) {
-    print('Message received: ${message.notification?.title}');
-
-    // Show local notification
-    _showLocalNotification(
-      title: message.notification?.title ?? 'Notification',
-      body: message.notification?.body ?? '',
-    );
-  }
-
-  /// Show a local notification (used for push notifications when app is in foreground)
+  /// Show a local notification. [id] is fixed per notification type so a
+  /// repeat replaces the earlier one instead of stacking.
   Future<void> _showLocalNotification({
+    required int id,
     required String title,
     required String body,
   }) async {
+    if (!_initialized) await initialize();
+
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
-          'walkies_channel',
-          'Walkies Notifications',
-          channelDescription: 'Notifications for Walkies app',
+          AppConstants.notificationChannelId,
+          AppConstants.notificationChannelName,
+          channelDescription: AppConstants.notificationChannelDescription,
           importance: Importance.max,
           priority: Priority.high,
           showWhen: true,
@@ -96,7 +59,7 @@ class NotificationService {
     );
 
     await _localNotifications.show(
-      id: DateTime.now().hashCode,
+      id: id,
       title: title,
       body: body,
       notificationDetails: details,
@@ -113,6 +76,7 @@ class NotificationService {
     final percentage = ((currentSteps / goalSteps) * 100).toStringAsFixed(0);
 
     await _showLocalNotification(
+      id: 1,
       title: '🎯 Goal Almost Complete!',
       body: 'You\'re $percentage% done! Only $stepsRemaining steps to go.',
     );
@@ -121,6 +85,7 @@ class NotificationService {
   /// Send a local notification for goal completion
   Future<void> sendGoalCompletedNotification() async {
     await _showLocalNotification(
+      id: 2,
       title: '🎉 Daily Goal Completed!',
       body:
           'Congratulations! You\'ve reached your daily step goal. Apps are now unlocked!',
@@ -130,6 +95,7 @@ class NotificationService {
   /// Send a local notification for app unlock
   Future<void> sendAppUnlockedNotification(String appName) async {
     await _showLocalNotification(
+      id: 3,
       title: '✅ App Unlocked',
       body: '$appName is now unlocked! You met your daily step goal.',
     );

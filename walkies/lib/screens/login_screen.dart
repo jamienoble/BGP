@@ -62,14 +62,11 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      // The auth wrapper in main.dart shows the dashboard once signed in
       await _supabaseService.signIn(
-        _emailController.text,
+        _emailController.text.trim(),
         _passwordController.text,
       );
-
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/dashboard');
-      }
     } catch (e) {
       setState(() {
         _errorMessage = _friendlyAuthError(e);
@@ -101,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       await _supabaseService.signUp(
-        _emailController.text,
+        _emailController.text.trim(),
         _passwordController.text,
       );
 
@@ -114,6 +111,44 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _errorMessage = _friendlyAuthError(e);
       });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleForgotPassword() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() {
+        _errorMessage = 'Enter your email above, then tap Forgot password.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await _supabaseService.sendPasswordResetEmail(email);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('If that account exists, a reset link is on its way.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = _friendlyAuthError(e);
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -184,6 +219,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 labelText: 'Email',
                 border: OutlineInputBorder(),
               ),
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email],
               enabled: !_isLoading,
             ),
             const SizedBox(height: 16),
@@ -196,7 +233,14 @@ class _LoginScreenState extends State<LoginScreen> {
               obscureText: true,
               enabled: !_isLoading,
             ),
-            const SizedBox(height: 24),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _isLoading ? null : _handleForgotPassword,
+                child: const Text('Forgot password?'),
+              ),
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(

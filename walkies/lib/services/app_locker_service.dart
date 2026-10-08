@@ -1,6 +1,7 @@
-import 'package:device_apps/device_apps.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:walkies/models/app_lock.dart';
+import 'package:walkies/models/installed_app.dart';
 import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/utils/date_utils.dart' as date_utils;
 
@@ -21,11 +22,10 @@ class AppLockerService {
     
     // Twitter / X
     'com.twitter.android',
-    'com.x.android',
-    
+
     // TikTok
     'com.zhiliaoapp.musically',
-    'com.ss.android.ugc.tiktok',
+    'com.ss.android.ugc.trill',
     
     // Snapchat
     'com.snapchat.android',
@@ -60,17 +60,16 @@ class AppLockerService {
     'com.nextdoor',
     
     // BeReal
-    'com.bereal.io',
+    'com.bereal.ft',
     
     // Pinterest
     'com.pinterest',
     
     // Mastodon
     'org.joinmastodon.android',
-    'sh.gab.messenger',
-    
+
     // Bluesky
-    'xyz.blusky',
+    'xyz.blueskyweb.app',
     
     // YouTube (video streaming/social)
     'com.google.android.youtube',
@@ -80,7 +79,7 @@ class AppLockerService {
     'tv.twitch.android.app',
     
     // Threads
-    'com.instagram.threads',
+    'com.instagram.barcelona',
   };
 
   factory AppLockerService() {
@@ -91,20 +90,24 @@ class AppLockerService {
 
   final SupabaseService _supabaseService = SupabaseService();
 
-  Future<List<Application>> getInstalledApps() async {
-    final apps = await DeviceApps.getInstalledApplications(
-      includeAppIcons: true,
-      onlyAppsWithLaunchIntent: true,
+  /// Launchable apps on the device, sorted by name. Pass [packages] to
+  /// only load those (icons are only rendered for the apps returned).
+  Future<List<InstalledApp>> getInstalledApps({Set<String>? packages}) async {
+    final result = await platform.invokeListMethod<Map<dynamic, dynamic>>(
+      'getInstalledApps',
+      {'packages': packages?.toList()},
     );
-    return apps;
+    return (result ?? []).map(InstalledApp.fromMap).toList();
   }
 
-  /// Get only social media apps that are installed
-  Future<List<Application>> getSocialMediaApps() async {
-    final allApps = await getInstalledApps();
-    return allApps
-        .where((app) => _socialMediaPackages.contains(app.packageName))
-        .toList();
+  /// Installed social media apps, plus any [alsoInclude] packages
+  /// (e.g. other apps the user has already locked)
+  Future<List<InstalledApp>> getSocialMediaApps({
+    Set<String> alsoInclude = const {},
+  }) {
+    return getInstalledApps(
+      packages: {..._socialMediaPackages, ...alsoInclude},
+    );
   }
 
   Future<bool> isAppLocked(String packageName) async {
@@ -161,22 +164,30 @@ class AppLockerService {
     }
   }
 
+  /// Remove every lock from the native blocker (e.g. on sign-out)
+  Future<void> clearAccessibilityServiceLockedApps() async {
+    try {
+      await platform.invokeMethod<bool>(
+        'updateLockedApps',
+        {'packages': <String>[]},
+      );
+    } catch (e) {
+      debugPrint('Error clearing locked apps: $e');
+    }
+  }
+
   /// Update the accessibility service with current locked apps
   Future<void> _updateAccessibilityServiceLockedApps() async {
     try {
       final lockedApps = await getLockedAppsList();
       final packageNames = lockedApps.map((app) => app.appPackageName).toList();
 
-      final result = await platform.invokeMethod<bool>(
+      await platform.invokeMethod<bool>(
         'updateLockedApps',
         {'packages': packageNames},
       );
-
-      if (result == true) {
-        print('Accessibility service updated with ${packageNames.length} locked apps');
-      }
     } catch (e) {
-      print('Error updating accessibility service: $e');
+      debugPrint('Error updating accessibility service: $e');
     }
   }
 
@@ -186,7 +197,7 @@ class AppLockerService {
       final result = await platform.invokeMethod<bool>('enableAppLocking');
       return result ?? false;
     } catch (e) {
-      print('Error enabling app locking: $e');
+      debugPrint('Error enabling app locking: $e');
       return false;
     }
   }
@@ -197,7 +208,7 @@ class AppLockerService {
       final result = await platform.invokeMethod<bool>('disableAppLocking');
       return result ?? false;
     } catch (e) {
-      print('Error disabling app locking: $e');
+      debugPrint('Error disabling app locking: $e');
       return false;
     }
   }
@@ -208,7 +219,7 @@ class AppLockerService {
       final result = await platform.invokeMethod<bool>('isAppLockingEnabled');
       return result ?? false;
     } catch (e) {
-      print('Error checking app locking status: $e');
+      debugPrint('Error checking app locking status: $e');
       return false;
     }
   }
@@ -218,7 +229,7 @@ class AppLockerService {
     try {
       await platform.invokeMethod('openAccessibilitySettings');
     } catch (e) {
-      print('Error opening accessibility settings: $e');
+      debugPrint('Error opening accessibility settings: $e');
     }
   }
 }

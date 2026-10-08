@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:device_apps/device_apps.dart';
+import 'package:walkies/models/installed_app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkies/services/app_locker_service.dart';
+import 'package:walkies/services/goal_rules.dart';
 import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/constants/app_constants.dart';
@@ -22,7 +23,8 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
   final _appLockerService = AppLockerService();
   final _supabaseService = SupabaseService();
 
-  List<Application>? _installedApps;
+  List<InstalledApp>? _installedApps;
+  bool _showAllApps = false;
   List<String>? _lockedAppIds;
   final Set<String> _savingPackages = {};
   bool _isLoading = true;
@@ -62,14 +64,19 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
   Future<void> _loadData() async {
     try {
       // Only load social media apps instead of all apps
-      final apps = await _appLockerService.getSocialMediaApps();
       final lockedApps = await _supabaseService.getLockedApps();
       final lockedIds = lockedApps.map((app) => app.appPackageName).toList();
+      // Social media apps by default; anything already locked always shows
+      final apps = _showAllApps
+          ? await _appLockerService.getInstalledApps()
+          : await _appLockerService.getSocialMediaApps(
+              alsoInclude: lockedIds.toSet(),
+            );
       final isServiceEnabled = await _appLockerService.isAppLockingEnabled();
       final stepGoal = await _supabaseService.getStepGoal();
       final todaySteps = await _supabaseService.getTodaySteps();
 
-      final dailyGoal = stepGoal?.dailySteps ?? AppConstants.defaultDailyStepGoal;
+      final dailyGoal = await GoalRules.effectiveGoal(stepGoal?.dailySteps);
       // The cloud count can lag the local one (e.g. after an offline sync),
       // so never send a lower value than the local tracker has
       final steps = max(StepTrackingService().todaySteps, todaySteps?.steps ?? 0);
@@ -104,7 +111,7 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
     }
   }
 
-  Future<void> _toggleAppLock(Application app) async {
+  Future<void> _toggleAppLock(InstalledApp app) async {
     // First check if accessibility service is enabled
     if (!_isAccessibilityServiceEnabled) {
       if (mounted) {
@@ -233,7 +240,7 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Lock Social Media Apps')),
+        appBar: AppBar(title: const Text('Lock Apps')),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -242,7 +249,7 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
     final lockedIds = _lockedAppIds ?? [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Lock Social Media Apps')),
+      appBar: AppBar(title: const Text('Lock Apps')),
       body: Column(
         children: [
           // Accessibility Service Status Banner
@@ -282,7 +289,7 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
                 if (_isAccessibilityServiceEnabled) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Select social media apps below to lock until you reach your daily step goal.',
+                    'Select apps below to lock until you reach your daily step goal.',
                     style: TextStyle(color: Colors.green[800], fontSize: 12),
                   ),
                 ],
@@ -310,13 +317,27 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
               ],
             ),
           ),
+          SwitchListTile(
+            title: const Text('Show all apps'),
+            subtitle: const Text('Lock any app, not just social media'),
+            value: _showAllApps,
+            onChanged: (value) {
+              setState(() {
+                _showAllApps = value;
+                _isLoading = true;
+              });
+              _loadData();
+            },
+          ),
           // Apps List
           Expanded(
             child: apps.isEmpty
                 ? Center(
                     child: Text(
-                      'No supported social media apps found.\n'
-                      'Install supported apps to lock them.',
+                      _showAllApps
+                          ? 'No apps found.'
+                          : 'No supported social media apps found.\n'
+                              'Turn on "Show all apps" to lock any app.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.grey[600]),
                     ),
@@ -329,8 +350,8 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
                       final isSaving = _savingPackages.contains(app.packageName);
 
                       return ListTile(
-                        leading: app is ApplicationWithIcon
-                            ? Image.memory(app.icon, width: 40, height: 40)
+                        leading: app.icon != null
+                            ? Image.memory(app.icon!, width: 40, height: 40)
                             : const Icon(Icons.apps),
                         title: Text(app.appName),
                         trailing: Switch(

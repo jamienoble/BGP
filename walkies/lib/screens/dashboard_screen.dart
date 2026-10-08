@@ -3,12 +3,12 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
-import 'package:walkies/models/step_goal.dart';
 import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/services/permissions_service.dart';
 import 'package:walkies/services/notification_service.dart';
 import 'package:walkies/services/app_locker_service.dart';
+import 'package:walkies/services/goal_rules.dart';
 import 'package:walkies/screens/goal_management_screen.dart';
 import 'package:walkies/screens/app_lock_settings_screen.dart';
 import 'package:walkies/widgets/weekly_streak_widget.dart';
@@ -29,8 +29,10 @@ class _DashboardScreenState extends State<DashboardScreen>
   final _notificationService = NotificationService();
   final _appLockerService = AppLockerService();
 
-  StepGoal? _stepGoal;
+  int? _savedGoal; // Goal as saved; may only apply from tomorrow
+  int _dailyGoal = AppConstants.defaultDailyStepGoal; // Goal in force today
   int _currentSteps = 0;
+  bool? _lastGoalMet;
   bool _isLoading = true;
   StreamSubscription<int>? _stepSubscription;
 
@@ -57,6 +59,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _loadData();
+    } else if (state == AppLifecycleState.paused) {
+      _stepTrackingService.flushToCloud();
     }
   }
 
@@ -142,50 +146,57 @@ class _DashboardScreenState extends State<DashboardScreen>
     await _writeStreakMap(prefs, streakMap);
   }
 
-  /// Load which days of the week had goals met
+  /// Load which recent days had goals met and work out the current streak.
+  /// Days the app saw are taken from the local record (judged against the
+  /// goal at the time); any others are filled from cloud history in one
+  /// request. Days up to a streak reset never count.
   Future<void> _loadDailyGoalsMet() async {
     try {
       final userId = _supabaseService.currentUserId;
       if (userId == null) return;
       final prefs = await SharedPreferences.getInstance();
       final streakMap = await _readStreakMap(prefs);
+      final resetDate = DateTime.tryParse(
+        prefs.getString(AppConstants.prefStreakResetDate) ?? '',
+      );
 
-      // Get last 7 days of daily steps
-      final now = DateTime.now();
-      final sevenDaysAgo = now.subtract(const Duration(days: 6));
+      final today = date_utils.DateUtils.getDayStart(DateTime.now());
+      const historyDays = AppConstants.dayHistoryLimit;
+      final days = List.generate(
+        historyDays,
+        (i) => DateTime(today.year, today.month, today.day - i),
+      );
 
-      Map<DateTime, bool> goalsMet = {};
-
-      for (int i = 0; i < 7; i++) {
-        final date = sevenDaysAgo.add(Duration(days: i));
-        final dateStr = date.toIso8601String().split('T')[0];
-        final dayKey = _dateKey(date);
-        if (streakMap.containsKey(dayKey)) {
-          goalsMet[DateTime(date.year, date.month, date.day)] =
-              streakMap[dayKey] ?? false;
-          continue;
+      final missing = days.where((d) => !streakMap.containsKey(_dateKey(d)));
+      if (missing.isNotEmpty) {
+        final history = await _supabaseService.getStepsHistory(historyDays);
+        final stepsByDay = {
+          for (final entry in history) _dateKey(entry.date): entry.steps,
+        };
+        for (final day in missing) {
+          final key = _dateKey(day);
+          if (DateUtils.isSameDay(day, today)) continue;
+          streakMap[key] = (stepsByDay[key] ?? 0) >= _dailyGoal;
         }
-
-        // Get daily steps for this date
-        final dailySteps = await _supabaseService.getTodayStepsForDate(dateStr);
-        final stepGoal = _stepGoal?.dailySteps ?? AppConstants.defaultDailyStepGoal;
-
-        goalsMet[DateTime(date.year, date.month, date.day)] =
-            (dailySteps?.steps ?? 0) >= stepGoal;
-        streakMap[dayKey] = goalsMet[DateTime(date.year, date.month, date.day)]!;
       }
 
-      // Calculate current streak
+      bool metOn(DateTime day) {
+        if (resetDate != null && !day.isAfter(resetDate)) return false;
+        return streakMap[_dateKey(day)] ?? false;
+      }
+
+      // Count back from today; today may still be in progress
       int streak = 0;
-      for (int i = 6; i >= 0; i--) {
-        final date = sevenDaysAgo.add(Duration(days: i));
-        if (goalsMet[DateTime(date.year, date.month, date.day)] ?? false) {
+      for (int i = 0; i < days.length; i++) {
+        if (metOn(days[i])) {
           streak++;
-        } else if (i != 6) {
-          // Only break if it's not today (allow today to be incomplete)
+        } else if (i != 0) {
           break;
         }
       }
+
+      final goalsMet = {for (final day in days.take(7)) day: metOn(day)};
+
       await _writeStreakMap(prefs, streakMap);
       await prefs.setInt(AppConstants.prefStreakCurrent, streak);
 
@@ -206,25 +217,28 @@ class _DashboardScreenState extends State<DashboardScreen>
       await _stepTrackingService.initialize();
 
       final goal = await _supabaseService.getStepGoal();
+      final dailyGoal = await GoalRules.effectiveGoal(goal?.dailySteps);
       // Seed from DB in case the pedometer hasn't fired yet
       final today = await _supabaseService.getTodaySteps();
 
       if (mounted) {
         setState(() {
-          _stepGoal = goal;
+          _savedGoal = goal?.dailySteps;
+          _dailyGoal = dailyGoal;
           // Take whichever is further along: the local count or the last cloud sync
           _currentSteps = max(_stepTrackingService.todaySteps, today?.steps ?? 0);
           _isLoading = false;
         });
         // Persist goal and steps to prefs for accessibility service
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setInt(AppConstants.prefDailyGoal, goal?.dailySteps ?? AppConstants.defaultDailyStepGoal);
+        await prefs.setInt(AppConstants.prefDailyGoal, dailyGoal);
         await prefs.setInt(AppConstants.prefTodaySteps, _currentSteps);
         await _appLockerService.syncNativeStepGoalPrefs(
-          dailyGoal: goal?.dailySteps ?? AppConstants.defaultDailyStepGoal,
+          dailyGoal: dailyGoal,
           todaySteps: _currentSteps,
         );
-        await _updateTodayStreakStatus(_currentSteps, goal?.dailySteps ?? AppConstants.defaultDailyStepGoal);
+        await _updateTodayStreakStatus(_currentSteps, dailyGoal);
+        _lastGoalMet = _currentSteps >= dailyGoal;
         await _loadDailyGoalsMet();
       }
 
@@ -244,14 +258,18 @@ class _DashboardScreenState extends State<DashboardScreen>
           // Persist to prefs for accessibility service
           final prefs = await SharedPreferences.getInstance();
           await prefs.setInt(AppConstants.prefTodaySteps, steps);
-          final dailyGoal =
-              _stepGoal?.dailySteps ?? AppConstants.defaultDailyStepGoal;
+          final dailyGoal = _dailyGoal;
           await _appLockerService.syncNativeStepGoalPrefs(
             dailyGoal: dailyGoal,
             todaySteps: steps,
           );
           await _updateTodayStreakStatus(steps, dailyGoal);
-          await _loadDailyGoalsMet();
+          // Only recompute the streak when today's status flips
+          final goalMet = steps >= dailyGoal;
+          if (goalMet != _lastGoalMet) {
+            _lastGoalMet = goalMet;
+            await _loadDailyGoalsMet();
+          }
 
           // Handle notifications
           await _handleStepUpdateNotifications(steps, dailyGoal);
@@ -266,16 +284,60 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
+  /// Sign out. The auth wrapper in main.dart switches to the login screen.
   Future<void> _signOut() async {
     try {
+      await _stepTrackingService.flushToCloud();
+      // Locks belong to the account; don't leave them enforced signed out
+      await _appLockerService.clearAccessibilityServiceLockedApps();
       await _supabaseService.signOut();
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/login');
-      }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not sign out. Please try again.')),
+      );
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete account?'),
+        content: const Text(
+          'This permanently deletes your account, step history, goal and '
+          'app locks. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await _supabaseService.deleteAccount();
+      await _appLockerService.clearAccessibilityServiceLockedApps();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not delete your account. Please try again.'),
+        ),
+      );
     }
   }
 
@@ -285,7 +347,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final goalSteps = _stepGoal?.dailySteps ?? AppConstants.defaultDailyStepGoal;
+    final goalSteps = _dailyGoal;
     final progress = goalSteps > 0 ? _currentSteps / goalSteps : 0.0;
     final goalMet = _currentSteps >= goalSteps;
 
@@ -293,7 +355,16 @@ class _DashboardScreenState extends State<DashboardScreen>
       appBar: AppBar(
         title: const Text('Walkies Dashboard'),
         actions: [
-          IconButton(icon: const Icon(Icons.logout), onPressed: _signOut),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'signOut') _signOut();
+              if (value == 'delete') _deleteAccount();
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'signOut', child: Text('Sign out')),
+              PopupMenuItem(value: 'delete', child: Text('Delete account')),
+            ],
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -386,7 +457,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                               ),
                             ),
                             Text(
-                              'of ${goalSteps} steps',
+                              'of $goalSteps steps',
                               style: const TextStyle(fontSize: 14),
                             ),
                           ],
@@ -442,7 +513,11 @@ class _DashboardScreenState extends State<DashboardScreen>
               elevation: 4,
               child: ListTile(
                 title: const Text('Daily Goal'),
-                subtitle: Text('${goalSteps} steps'),
+                subtitle: Text(
+                  _savedGoal != null && _savedGoal != goalSteps
+                      ? '$goalSteps steps today, $_savedGoal from tomorrow'
+                      : '$goalSteps steps',
+                ),
                 trailing: const Icon(Icons.arrow_forward),
                 onTap: () {
                   Navigator.of(context)

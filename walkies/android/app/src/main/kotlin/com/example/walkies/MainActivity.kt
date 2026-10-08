@@ -3,12 +3,16 @@ package com.example.walkies
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.Drawable
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.ByteArrayOutputStream
 
 class MainActivity : FlutterActivity() {
   private val CHANNEL = "com.example.walkies/app_locking"
@@ -44,6 +48,17 @@ class MainActivity : FlutterActivity() {
             val isEnabled = isAccessibilityServiceEnabled()
             result.success(isEnabled)
           }
+          "getInstalledApps" -> {
+            // null = every launchable app; otherwise only these packages
+            val only = call.argument<List<String>>("packages")?.toSet()
+            Thread {
+              val apps = try { loadLaunchableApps(only) } catch (e: Exception) { null }
+              runOnUiThread {
+                if (apps != null) result.success(apps)
+                else result.error("APPS_FAILED", "Could not list installed apps", null)
+              }
+            }.start()
+          }
           "openAccessibilitySettings" -> {
             openAccessibilitySettings()
             result.success(null)
@@ -65,6 +80,37 @@ class MainActivity : FlutterActivity() {
       }
     }
     return false
+  }
+
+  /** Apps that appear in the launcher, with a small PNG icon each. */
+  private fun loadLaunchableApps(only: Set<String>?): List<Map<String, Any>> {
+    val pm = packageManager
+    val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+    val seen = HashSet<String>()
+    val apps = ArrayList<Map<String, Any>>()
+    for (info in pm.queryIntentActivities(launcherIntent, 0)) {
+      val pkg = info.activityInfo.packageName
+      if (pkg == packageName || !seen.add(pkg)) continue
+      if (only != null && pkg !in only) continue
+      apps.add(
+        mapOf(
+          "packageName" to pkg,
+          "appName" to info.loadLabel(pm).toString(),
+          "icon" to drawableToPng(info.loadIcon(pm)),
+        ),
+      )
+    }
+    return apps.sortedBy { (it["appName"] as String).lowercase() }
+  }
+
+  private fun drawableToPng(drawable: Drawable): ByteArray {
+    val size = 96
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    drawable.setBounds(0, 0, size, size)
+    drawable.draw(Canvas(bitmap))
+    val out = ByteArrayOutputStream()
+    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+    return out.toByteArray()
   }
 
   private fun openAccessibilitySettings() {

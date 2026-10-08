@@ -87,10 +87,10 @@ class AppBlockingAccessibilityService : AccessibilityService(), SensorEventListe
         ensureNotificationChannel()
         startStepCounter()
         val info = AccessibilityServiceInfo().apply {
-            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOWS_CHANGED
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             notificationTimeout = 100
-            flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+            flags = AccessibilityServiceInfo.DEFAULT
         }
         serviceInfo = info
         android.util.Log.i("AppBlocker", "Service Started")

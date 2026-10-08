@@ -14,6 +14,8 @@ class AppConstants {
   static const String prefStepLastRaw = 'step_last_raw';
   static const String prefTodaySteps = 'today_steps';
   static const String prefDailyGoal = 'daily_goal';
+  static const String prefGoalFloorValue = 'goal_floor_value';
+  static const String prefGoalFloorDate = 'goal_floor_date';
 
   // SharedPreferences keys for streak tracking
   static const String prefStreakDaysMet = 'streak_days_met_v1';
@@ -50,7 +52,7 @@ class AppConstants {
 
   // Duration constants
   static const Duration retryInitialDelay = Duration(milliseconds: 500);
+  static const Duration cloudSyncInterval = Duration(minutes: 1);
   static const int maxRetries = 3;
-  static const int dayHistoryLimit = 35;
-  static const int stepsHistoryDays = 6;
+  static const int dayHistoryLimit = 366;
 }
