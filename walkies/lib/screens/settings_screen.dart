@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:walkies/screens/goal_management_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:walkies/constants/app_constants.dart';
 import 'package:walkies/services/app_locker_service.dart';
 import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/services/supabase_service.dart';
@@ -16,6 +17,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _supabaseService = SupabaseService();
   String? _preferredName;
   bool _isSavingName = false;
+  bool _lockCommunity = false;
+
+  Future<void> _loadCommunityLock() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _lockCommunity =
+          prefs.getBool(AppConstants.prefCommunityLockedUntilGoal) ?? false;
+    });
+  }
+
+  Future<void> _setCommunityLock(bool value) async {
+    setState(() => _lockCommunity = value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(AppConstants.prefCommunityLockedUntilGoal, value);
+  }
 
   /// Sign out. Settings sits above the main app, so pop back to the root;
   /// the auth wrapper in main.dart then shows the login screen.
@@ -78,6 +95,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadPreferredName();
+    _loadCommunityLock();
   }
 
   Future<void> _loadPreferredName() async {
@@ -206,6 +224,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 24),
 
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: SwitchListTile(
+              title: const Text('Lock Community until goal met'),
+              subtitle: const Text(
+                'Treat the Community tab like a locked app',
+              ),
+              value: _lockCommunity,
+              onChanged: _setCommunityLock,
+            ),
+          ),
+          const SizedBox(height: 24),
           // Account Section
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),

@@ -63,6 +63,11 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- Opening article source links in the browser -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
         <!-- Lets Walkies list and lock launchable apps without QUERY_ALL_PACKAGES -->
         <intent>
             <action android:name="android.intent.action.MAIN"/>

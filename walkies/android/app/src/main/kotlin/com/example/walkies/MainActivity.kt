@@ -44,6 +44,10 @@ class MainActivity : FlutterActivity() {
             StepStore.recordFlutterSteps(this, todaySteps, date)
             result.success(true)
           }
+          "getStepsRemaining" -> {
+            val remaining = StepStore.getDailyGoal(this) - StepStore.getTodaySteps(this)
+            result.success(maxOf(0, remaining))
+          }
           "wasBlockedToday" -> {
             result.success(StepStore.wasBlockedToday(this))
           }

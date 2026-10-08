@@ -164,6 +164,16 @@ class AppLockerService {
     }
   }
 
+  /// Steps still needed today, from the native store (which also counts
+  /// steps taken while the app was closed). Null if unavailable.
+  Future<int?> getStepsRemaining() async {
+    try {
+      return await platform.invokeMethod<int>('getStepsRemaining');
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Whether a locked app was opened today before the goal was met
   /// (recorded by the native blocker). Such a day doesn't count for the streak.
   Future<bool> wasLockedAppOpenedBeforeGoalToday() async {

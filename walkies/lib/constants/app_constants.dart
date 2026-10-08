@@ -17,6 +17,7 @@ class AppConstants {
   static const String prefDailyGoal = 'daily_goal';
   static const String prefGoalFloorValue = 'goal_floor_value';
   static const String prefGoalFloorDate = 'goal_floor_date';
+  static const String prefCommunityLockedUntilGoal = 'community_locked_until_goal';
 
   // SharedPreferences keys for streak tracking
   static const String prefStreakDaysMet = 'streak_days_met_v1';
