@@ -240,3 +240,30 @@ changing the UI, regenerate them with:
 flutter test test/screenshots/capture.dart
 ```
 
+## Checks, error reporting and reliability
+
+**Automatic checks.** `.github/workflows/walkies.yml` runs on every push
+that touches `walkies/`:
+
+- `flutter analyze`, all tests (including a layout check at 1.5x system
+  text size), and a debug Android build, which compiles the Kotlin app
+  blocker. The APK is attached to each run.
+- Every Supabase migration applied twice to a fresh PostgreSQL, then the
+  access-rule tests in `supabase/tests/`. Run locally with
+  `PGHOST=... PGUSER=postgres supabase/tests/run.sh`.
+- Type check, lint and tests for the news drafting function.
+
+**Error reporting (Sentry).** Off unless the app is built with a DSN:
+
+```sh
+flutter build apk --release --dart-define=SENTRY_DSN=https://<key>@<org>.ingest.de.sentry.io/<project>
+```
+
+Create the project at sentry.io (choose EU data storage). Reports contain
+the error, stack trace and where it happened; no user identity, IP
+address, screenshots or request bodies. Expected network failures
+(offline, timeouts) are not reported.
+
+**Weak signal.** Every Supabase request has a 15 second limit; read
+requests are retried twice. Writes are never retried automatically.
+

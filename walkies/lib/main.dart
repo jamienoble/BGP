@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:walkies/services/error_reporter.dart';
+import 'package:walkies/services/resilient_http_client.dart';
 import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/screens/login_screen.dart';
 import 'package:walkies/screens/dashboard_screen.dart';
@@ -12,16 +14,20 @@ import 'package:walkies/screens/community_screen.dart';
 import 'package:walkies/theme/app_theme.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  await ErrorReporter.runApp(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  // The publishable (anon) key is meant to ship in the app; data is
-  // protected by row level security in Supabase
-  await Supabase.initialize(
-    url: 'https://cbanimdilwtfmouyfumr.supabase.co',
-    anonKey: 'sb_publishable_6a52AMpgt5KIdS3KcGzEcQ_5P212w-l',
-  );
+    // The publishable (anon) key is meant to ship in the app; data is
+    // protected by row level security in Supabase
+    await Supabase.initialize(
+      url: 'https://cbanimdilwtfmouyfumr.supabase.co',
+      anonKey: 'sb_publishable_6a52AMpgt5KIdS3KcGzEcQ_5P212w-l',
+      // Time limits and safe retries for every request (weak signal)
+      httpClient: ResilientHttpClient(),
+    );
 
-  runApp(const MyApp());
+    runApp(const MyApp());
+  });
 }
 
 class MyApp extends StatelessWidget {

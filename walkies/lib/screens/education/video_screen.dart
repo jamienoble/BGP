@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:walkies/services/error_reporter.dart';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
@@ -69,8 +70,8 @@ class _VideoScreenState extends State<VideoScreen> {
         const Duration(seconds: 15),
         (_) => _saveProgress(),
       );
-    } catch (e) {
-      debugPrint('Video failed to load: $e');
+    } catch (e, stack) {
+      ErrorReporter.report(e, stack, context: 'Video failed to load');
       if (mounted) {
         setState(() {
           _isStarting = false;
@@ -92,8 +93,8 @@ class _VideoScreenState extends State<VideoScreen> {
         progressSeconds: position.inSeconds,
         completed: completed,
       );
-    } catch (e) {
-      debugPrint('Could not save video progress: $e');
+    } catch (e, stack) {
+      ErrorReporter.report(e, stack, context: 'Could not save video progress');
     }
   }
 

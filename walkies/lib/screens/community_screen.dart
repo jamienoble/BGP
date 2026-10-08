@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:walkies/services/error_reporter.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkies/theme/app_theme.dart';
@@ -118,8 +119,8 @@ class _CommunityScreenState extends State<CommunityScreen>
         _hasMore = posts.length >= CommunityService.pageSize;
         _view = _View.ready;
       });
-    } catch (e) {
-      debugPrint('Error loading community: $e');
+    } catch (e, stack) {
+      ErrorReporter.report(e, stack, context: 'Error loading community');
       if (mounted && _view != _View.ready) setState(() => _view = _View.error);
     }
   }

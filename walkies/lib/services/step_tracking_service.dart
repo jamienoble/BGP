@@ -1,3 +1,4 @@
+import 'package:walkies/services/error_reporter.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:pedometer/pedometer.dart';
@@ -95,7 +96,8 @@ class StepTrackingService {
 
       Pedometer.stepCountStream.listen(
         _onStepCount,
-        onError: (error) {
+        onError: (Object error, StackTrace stack) {
+          ErrorReporter.report(error, stack, context: 'Step sensor');
           _initializationError =
               '${AppConstants.errorStepSensorFailed}: $error';
         },
@@ -103,7 +105,8 @@ class StepTrackingService {
 
       _isInitialized = true;
       await refreshForToday();
-    } catch (e) {
+    } catch (e, stack) {
+      ErrorReporter.report(e, stack, context: 'Step tracking init');
       _initializationError = '${AppConstants.errorInitializationFailed}: $e';
     }
   }
@@ -266,8 +269,9 @@ class StepTrackingService {
     try {
       await _supabaseService.upsertTodaySteps(steps);
       _lastSyncedSteps = steps;
-    } catch (_) {
-      // Ignore sync errors (e.g., offline); retried on the next interval
+    } catch (e, stack) {
+      // Offline is expected and not reported; retried on the next interval
+      ErrorReporter.report(e, stack, context: 'Step cloud sync');
     }
   }
 

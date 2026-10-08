@@ -154,14 +154,18 @@ class Pill extends StatelessWidget {
             Icon(icon, size: 14, color: foreground),
             const SizedBox(width: 5),
           ],
-          Text(
-            text,
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: foreground,
-              height: 1.2,
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: foreground,
+                height: 1.2,
+              ),
             ),
           ),
         ],
@@ -189,7 +193,8 @@ class InitialAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (bg, fg) =
-        _avatarColours[name.codeUnits.fold(0, (a, b) => a + b) % _avatarColours.length];
+        _avatarColours[name.codeUnits.fold(0, (a, b) => a + b) %
+            _avatarColours.length];
     return Container(
       width: size,
       height: size,
@@ -242,7 +247,11 @@ class ArtworkPlaceholder extends StatelessWidget {
     return CustomPaint(
       painter: _ArtPainter(colours, hash),
       child: Center(
-        child: Icon(icon, size: iconSize, color: Colors.white.withValues(alpha: 0.92)),
+        child: Icon(
+          icon,
+          size: iconSize,
+          color: Colors.white.withValues(alpha: 0.92),
+        ),
       ),
     );
   }
@@ -270,9 +279,15 @@ class _ArtPainter extends CustomPainter {
     for (var i = 0; i < 4; i++) {
       final r = size.shortestSide * (0.35 + random.nextDouble() * 0.5);
       canvas.drawCircle(
-        Offset(size.width * random.nextDouble(), size.height * random.nextDouble()),
+        Offset(
+          size.width * random.nextDouble(),
+          size.height * random.nextDouble(),
+        ),
         r,
-        Paint()..color = colours[2].withValues(alpha: 0.10 + random.nextDouble() * 0.10),
+        Paint()
+          ..color = colours[2].withValues(
+            alpha: 0.10 + random.nextDouble() * 0.10,
+          ),
       );
     }
   }
@@ -380,10 +395,7 @@ class EmptyState extends StatelessWidget {
             const SizedBox(height: 8),
             Text(message!, textAlign: TextAlign.center, style: text.bodyMedium),
           ],
-          if (action != null) ...[
-            const SizedBox(height: 18),
-            action!,
-          ],
+          if (action != null) ...[const SizedBox(height: 18), action!],
         ],
       ),
     );

@@ -9,6 +9,10 @@ import 'package:walkies/services/permissions_service.dart';
 import 'package:walkies/services/notification_service.dart';
 import 'package:walkies/services/app_locker_service.dart';
 import 'package:walkies/services/goal_rules.dart';
+import 'package:walkies/services/error_reporter.dart';
+import 'package:walkies/models/step_goal.dart';
+import 'package:walkies/models/daily_steps.dart';
+import 'package:walkies/models/app_lock.dart';
 import 'package:walkies/screens/app_lock_settings_screen.dart';
 import 'package:walkies/widgets/weekly_streak_widget.dart';
 import 'package:walkies/widgets/ui.dart';
@@ -34,6 +38,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   String? _preferredName;
   int _currentSteps = 0;
   bool? _lastGoalMet;
+  bool _blockerOff = false;
   bool _isLoading = true;
   StreamSubscription<int>? _stepSubscription;
 
@@ -71,13 +76,20 @@ class _DashboardScreenState extends State<DashboardScreen>
       await PermissionsService().requestNotificationPermission();
       await _notificationService.initialize();
       await _loadDailyGoalsMet();
-    } catch (e) {
-      debugPrint('Error initializing notifications: $e');
+    } catch (e, stack) {
+      ErrorReporter.report(
+        e,
+        stack,
+        context: 'Error initializing notifications',
+      );
     }
   }
 
   /// Handle step update notifications based on progress towards goal
-  Future<void> _handleStepUpdateNotifications(int currentSteps, int goalSteps) async {
+  Future<void> _handleStepUpdateNotifications(
+    int currentSteps,
+    int goalSteps,
+  ) async {
     if (goalSteps <= 0) return;
 
     final progress = (currentSteps / goalSteps) * 100;
@@ -86,8 +98,12 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     // Goal completed: notify once per day
     if (currentSteps >= goalSteps) {
-      if (prefs.getString(AppConstants.prefGoalCompletedNotifiedDate) != today) {
-        await prefs.setString(AppConstants.prefGoalCompletedNotifiedDate, today);
+      if (prefs.getString(AppConstants.prefGoalCompletedNotifiedDate) !=
+          today) {
+        await prefs.setString(
+          AppConstants.prefGoalCompletedNotifiedDate,
+          today,
+        );
         await prefs.setString(AppConstants.prefGoalNearNotifiedDate, today);
         await _notificationService.sendGoalCompletedNotification();
       }
@@ -106,7 +122,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  String _dateKey(DateTime date) => date_utils.DateUtils.todayDateString(dateTime: date);
+  String _dateKey(DateTime date) =>
+      date_utils.DateUtils.todayDateString(dateTime: date);
 
   Future<Map<String, bool>> _readStreakMap(SharedPreferences prefs) async {
     final raw = prefs.getString(AppConstants.prefStreakDaysMet);
@@ -123,7 +140,10 @@ class _DashboardScreenState extends State<DashboardScreen>
     SharedPreferences prefs,
     Map<String, bool> streakMap,
   ) async {
-    await prefs.setString(AppConstants.prefStreakDaysMet, jsonEncode(streakMap));
+    await prefs.setString(
+      AppConstants.prefStreakDaysMet,
+      jsonEncode(streakMap),
+    );
   }
 
   Future<void> _updateTodayStreakStatus(int steps, int goalSteps) async {
@@ -134,17 +154,18 @@ class _DashboardScreenState extends State<DashboardScreen>
     final todayKey = _dateKey(today);
     final resetDate = prefs.getString(AppConstants.prefStreakResetDate);
     final wasResetToday = resetDate == todayKey;
-    
+
     // Check if a locked app was opened before reaching the goal
     // (recorded by the native blocker)
-    final blockedAppOpenedBeforeGoal =
-        await _appLockerService.wasLockedAppOpenedBeforeGoalToday();
-    
+    final blockedAppOpenedBeforeGoal = await _appLockerService
+        .wasLockedAppOpenedBeforeGoalToday();
+
     // Only count today as streak success if:
     // 1. Not reset today
     // 2. Goal is met
     // 3. No blocked apps were opened before goal was met
-    streakMap[todayKey] = !wasResetToday && steps >= goalSteps && !blockedAppOpenedBeforeGoal;
+    streakMap[todayKey] =
+        !wasResetToday && steps >= goalSteps && !blockedAppOpenedBeforeGoal;
 
     // Keep only recent entries
     final cutoff = today.subtract(Duration(days: AppConstants.dayHistoryLimit));
@@ -216,8 +237,19 @@ class _DashboardScreenState extends State<DashboardScreen>
           _currentStreak = streak;
         });
       }
-    } catch (e) {
-      debugPrint('Error loading daily goals: $e');
+    } catch (e, stack) {
+      ErrorReporter.report(e, stack, context: 'Error loading daily goals');
+    }
+  }
+
+  /// Runs [request], returning [fallback] if it fails (e.g. offline), so
+  /// one failed request doesn't blank the whole screen.
+  Future<T> _orFallback<T>(Future<T> request, T fallback, String what) async {
+    try {
+      return await request;
+    } catch (e, stack) {
+      ErrorReporter.report(e, stack, context: 'Dashboard: $what');
+      return fallback;
     }
   }
 
@@ -227,23 +259,48 @@ class _DashboardScreenState extends State<DashboardScreen>
       await _stepTrackingService.initialize();
       await _stepTrackingService.refreshForToday();
 
-      final goal = await _supabaseService.getStepGoal();
-      final dailyGoal = await GoalRules.effectiveGoal(goal?.dailySteps);
-      await _supabaseService.ensureUserProfile();
-      final preferredName = await _supabaseService.getPreferredName();
-      // Seed from DB in case the pedometer hasn't fired yet
-      final today = await _supabaseService.getTodaySteps();
+      final prefs = await SharedPreferences.getInstance();
+      final results = await Future.wait<Object?>([
+        _orFallback(_supabaseService.getStepGoal(), null, 'goal'),
+        _orFallback(
+          _supabaseService.ensureUserProfile().then(
+            (_) => _supabaseService.getPreferredName(),
+          ),
+          _preferredName,
+          'name',
+        ),
+        // Seed from the cloud in case the pedometer hasn't fired yet
+        _orFallback(_supabaseService.getTodaySteps(), null, 'cloud steps'),
+        _appLockerService.getNativeTodaySteps(),
+        _orFallback(_appLockerService.getLockedAppsList(), null, 'locked apps'),
+        _appLockerService.isAppLockingEnabled(),
+      ]);
+      final goal = results[0] as StepGoal?;
+      // Offline: fall back to the last goal this phone knew about
+      final savedGoal =
+          goal?.dailySteps ?? prefs.getInt(AppConstants.prefDailyGoal);
+      final dailyGoal = await GoalRules.effectiveGoal(savedGoal);
+      final cloudSteps = (results[2] as DailySteps?)?.steps ?? 0;
+      final nativeSteps = results[3] as int? ?? 0;
+      final lockedApps = results[4] as List<AppLock>?;
+      final blockerEnabled = results[5] as bool;
 
       if (mounted) {
         setState(() {
           _dailyGoal = dailyGoal;
-          _preferredName = preferredName;
-          // Take whichever is further along: the local count or the last cloud sync
-          _currentSteps = max(_stepTrackingService.todaySteps, today?.steps ?? 0);
+          _preferredName = results[1] as String?;
+          // Show the same count the app blocker uses
+          _currentSteps = [
+            _stepTrackingService.todaySteps,
+            cloudSteps,
+            nativeSteps,
+          ].reduce(max);
+          // Locks set but Android has switched the blocker off: they won't
+          // be enforced, so say so. (Null list = couldn't check; stay quiet.)
+          _blockerOff = !blockerEnabled && (lockedApps?.isNotEmpty ?? false);
           _isLoading = false;
         });
         // Persist goal and steps to prefs for accessibility service
-        final prefs = await SharedPreferences.getInstance();
         await prefs.setInt(AppConstants.prefDailyGoal, dailyGoal);
         await prefs.setInt(AppConstants.prefTodaySteps, _currentSteps);
         await _appLockerService.syncNativeStepGoalPrefs(
@@ -263,33 +320,37 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       // Listen to live step updates (today's delta, not raw lifetime count)
       _stepSubscription = _stepTrackingService.todayStepsStream.listen((
-        steps,
+        appSteps,
       ) async {
-        if (mounted) {
-          setState(() {
-            _currentSteps = steps;
-          });
-          // Persist to prefs for accessibility service
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setInt(AppConstants.prefTodaySteps, steps);
-          final dailyGoal = _dailyGoal;
-          await _appLockerService.syncNativeStepGoalPrefs(
-            dailyGoal: dailyGoal,
-            todaySteps: steps,
-          );
-          await _updateTodayStreakStatus(steps, dailyGoal);
-          // Only recompute the streak when today's status flips
-          final goalMet = steps >= dailyGoal;
-          if (goalMet != _lastGoalMet) {
-            _lastGoalMet = goalMet;
-            await _loadDailyGoalsMet();
-          }
-
-          // Handle notifications
-          await _handleStepUpdateNotifications(steps, dailyGoal);
+        if (!mounted) return;
+        final dailyGoal = _dailyGoal;
+        // Pass the app's count to the blocker, then show the blocker's view
+        // (which also includes steps the phone's sensor counted)
+        await _appLockerService.syncNativeStepGoalPrefs(
+          dailyGoal: dailyGoal,
+          todaySteps: appSteps,
+        );
+        final nativeSteps = await _appLockerService.getNativeTodaySteps() ?? 0;
+        final steps = max(appSteps, nativeSteps);
+        if (!mounted) return;
+        setState(() {
+          _currentSteps = steps;
+        });
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt(AppConstants.prefTodaySteps, steps);
+        await _updateTodayStreakStatus(steps, dailyGoal);
+        // Only recompute the streak when today's status flips
+        final goalMet = steps >= dailyGoal;
+        if (goalMet != _lastGoalMet) {
+          _lastGoalMet = goalMet;
+          await _loadDailyGoalsMet();
         }
+
+        // Handle notifications
+        await _handleStepUpdateNotifications(steps, dailyGoal);
       });
-    } catch (e) {
+    } catch (e, stack) {
+      ErrorReporter.report(e, stack, context: 'Dashboard: load');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -306,8 +367,9 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     final text = Theme.of(context).textTheme;
     final goalSteps = _dailyGoal;
-    final progress =
-        goalSteps > 0 ? (_currentSteps / goalSteps).clamp(0.0, 1.0) : 0.0;
+    final progress = goalSteps > 0
+        ? (_currentSteps / goalSteps).clamp(0.0, 1.0)
+        : 0.0;
     final goalMet = _currentSteps >= goalSteps;
     final distanceKm = _currentSteps * 0.0008;
     final activeMinutes = (_currentSteps / 100).round();
@@ -332,7 +394,8 @@ class _DashboardScreenState extends State<DashboardScreen>
               tone: NoticeTone.warning,
               icon: Icons.directions_walk_rounded,
               title: 'Step counting is off',
-              message: 'Allow physical activity access so Walkies can count '
+              message:
+                  'Allow physical activity access so Walkies can count '
                   'your steps and unlock your apps.',
               actions: [
                 FilledButton(
@@ -342,6 +405,28 @@ class _DashboardScreenState extends State<DashboardScreen>
                 OutlinedButton(
                   onPressed: _loadData,
                   child: const Text('Try again'),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.gap),
+          ],
+          if (_blockerOff) ...[
+            NoticeCard(
+              tone: NoticeTone.danger,
+              icon: Icons.shield_outlined,
+              title: 'App locking is switched off',
+              message:
+                  'Android has turned off the Walkies blocker, so your '
+                  'locked apps will open. Turn it back on, and stop battery '
+                  'saving from closing Walkies so it stays on.',
+              actions: [
+                FilledButton(
+                  onPressed: _appLockerService.openAccessibilitySettings,
+                  child: const Text('Turn on'),
+                ),
+                OutlinedButton(
+                  onPressed: _appLockerService.openBatterySettings,
+                  child: const Text('Battery settings'),
                 ),
               ],
             ),
@@ -404,14 +489,16 @@ class _DashboardScreenState extends State<DashboardScreen>
                     children: [
                       Text(
                         'Today\'s nudge',
-                        style: text.titleSmall!
-                            .copyWith(color: AppPalette.forestDeep),
+                        style: text.titleSmall!.copyWith(
+                          color: AppPalette.forestDeep,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         _nudge(goalMet, progress),
-                        style: text.bodyMedium!
-                            .copyWith(color: AppPalette.forestDeep),
+                        style: text.bodyMedium!.copyWith(
+                          color: AppPalette.forestDeep,
+                        ),
                       ),
                     ],
                   ),
@@ -455,7 +542,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, color: AppPalette.muted),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppPalette.muted,
+                ),
               ],
             ),
           ),
@@ -465,17 +555,38 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   static const _weekdays = [
-    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
   ];
   static const _months = [
-    'January', 'February', 'March', 'April', 'May', 'June', 'July',
-    'August', 'September', 'October', 'November', 'December',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   String _nudge(bool goalMet, double progress) {
-    if (goalMet) return 'Goal done. Anything extra today is a bonus for tomorrow\'s you.';
+    if (goalMet) {
+      return 'Goal done. Anything extra today is a bonus for tomorrow\'s you.';
+    }
     if (progress >= 0.8) return 'Nearly there. One short walk should do it.';
-    if (progress >= 0.5) return 'Over halfway. A lap of the block after your next meal keeps the momentum going.';
+    if (progress >= 0.5) {
+      return 'Over halfway. A lap of the block after your next meal keeps '
+          'the momentum going.';
+    }
     return 'A brisk 10-minute walk now makes a real dent in your goal.';
   }
 
@@ -541,11 +652,15 @@ class _StepsHero extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(
-                'TODAY\'S STEPS',
-                style: text.labelSmall!.copyWith(color: Colors.white70),
+              Expanded(
+                child: Text(
+                  'TODAY\'S STEPS',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.labelSmall!.copyWith(color: Colors.white70),
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               goalMet
                   ? const Pill(
                       'Apps unlocked',
@@ -582,11 +697,15 @@ class _StepsHero extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              Text(
-                '${(progress * 100).round()}% of your goal',
-                style: text.labelMedium!.copyWith(color: Colors.white),
+              Expanded(
+                child: Text(
+                  '${(progress * 100).round()}% of your goal',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.labelMedium!.copyWith(color: Colors.white),
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Text(
                 'Goal ${formatNumber(goal)}',
                 style: text.labelMedium!.copyWith(color: Colors.white70),
@@ -608,12 +727,12 @@ class _OdometerDigit extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     TextStyle faded(double size) => TextStyle(
-          fontFamily: 'Fraunces',
-          fontWeight: FontWeight.w500,
-          fontSize: size,
-          height: 1,
-          color: Colors.white.withValues(alpha: 0.28),
-        );
+      fontFamily: 'Fraunces',
+      fontWeight: FontWeight.w500,
+      fontSize: size,
+      height: 1,
+      color: Colors.white.withValues(alpha: 0.28),
+    );
     return Container(
       height: 104,
       decoration: BoxDecoration(
@@ -633,14 +752,17 @@ class _OdometerDigit extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           Text('${(digit + 9) % 10}', style: faded(14)),
-          Text(
-            '$digit',
-            style: const TextStyle(
-              fontFamily: 'Fraunces',
-              fontWeight: FontWeight.w600,
-              fontSize: 40,
-              height: 1,
-              color: Colors.white,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '$digit',
+              style: const TextStyle(
+                fontFamily: 'Fraunces',
+                fontWeight: FontWeight.w600,
+                fontSize: 40,
+                height: 1,
+                color: Colors.white,
+              ),
             ),
           ),
           Text('${(digit + 1) % 10}', style: faded(14)),
@@ -680,17 +802,27 @@ class _StatTile extends StatelessWidget {
             foreground: accent ? const Color(0xFF8A4318) : AppPalette.forest,
           ),
           const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(value, style: text.headlineSmall),
-              const SizedBox(width: 3),
-              Text(unit, style: text.bodySmall),
-            ],
+          // Shrinks rather than overflowing with large system text sizes
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(value, style: text.headlineSmall),
+                const SizedBox(width: 3),
+                Text(unit, style: text.bodySmall),
+              ],
+            ),
           ),
           const SizedBox(height: 2),
-          Text(label, style: text.bodySmall),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: text.bodySmall,
+          ),
         ],
       ),
     );

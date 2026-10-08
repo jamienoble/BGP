@@ -71,7 +71,14 @@ class FakeStepTrackingService extends StepTrackingService {
 }
 
 class FakeAppLockerService extends AppLockerService {
-  FakeAppLockerService() : super.forTesting();
+  FakeAppLockerService({this.blockerEnabled = true, this.nativeSteps})
+      : super.forTesting();
+
+  final bool blockerEnabled;
+  final int? nativeSteps;
+
+  @override
+  Future<int?> getNativeTodaySteps() async => nativeSteps;
 
   static final _apps = [
     InstalledApp(packageName: 'com.instagram.android', appName: 'Instagram'),
@@ -91,7 +98,7 @@ class FakeAppLockerService extends AppLockerService {
   }) async =>
       _apps;
   @override
-  Future<bool> isAppLockingEnabled() async => true;
+  Future<bool> isAppLockingEnabled() async => blockerEnabled;
   @override
   Future<void> syncNativeStepGoalPrefs({
     required int dailyGoal,
@@ -333,10 +340,17 @@ class FakeCommunityService extends CommunityService {
   Future<List<CommunityComment>> getComments(String postId) async => comments;
 }
 
-void installFakes({bool joinedCommunity = true}) {
+void installFakes({
+  bool joinedCommunity = true,
+  bool blockerEnabled = true,
+  int? nativeSteps,
+}) {
   SupabaseService.debugOverride = FakeSupabaseService();
   StepTrackingService.debugOverride = FakeStepTrackingService();
-  AppLockerService.debugOverride = FakeAppLockerService();
+  AppLockerService.debugOverride = FakeAppLockerService(
+    blockerEnabled: blockerEnabled,
+    nativeSteps: nativeSteps,
+  );
   NotificationService.debugOverride = FakeNotificationService();
   PermissionsService.debugOverride = FakePermissionsService();
   ContentService.debugOverride = FakeContentService();

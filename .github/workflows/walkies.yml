@@ -1,0 +1,92 @@
+name: Walkies
+
+on:
+  push:
+    paths: ["walkies/**", ".github/workflows/walkies.yml"]
+  pull_request:
+    paths: ["walkies/**", ".github/workflows/walkies.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: walkies-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: App (analyze, test, Android build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: walkies
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.6"
+          channel: stable
+          cache: true
+
+      - name: Install packages
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Unit and widget tests (includes the large-text layout check)
+        run: flutter test
+
+      # Compiles the Kotlin (app blocker, step store) as well as the Dart
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: walkies-debug-apk
+          path: walkies/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14
+
+  database:
+    name: Database migrations and access rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply migrations twice and run access-rule tests
+        run: walkies/supabase/tests/run.sh
+
+  news-function:
+    name: News drafting function
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: walkies/supabase/functions/draft-news
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno check index.ts
+      - run: deno lint
+      - run: deno test feed_test.ts

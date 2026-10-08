@@ -154,7 +154,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('If that account exists, a reset link is on its way.'),
+            content: Text(
+              'If that account exists, a reset link is on its way.',
+            ),
           ),
         );
       }
@@ -225,9 +227,9 @@ class _LoginScreenState extends State<LoginScreen> {
               onSelectionChanged: _isLoading
                   ? null
                   : (value) => setState(() {
-                        _isCreatingAccount = value.first;
-                        _errorMessage = null;
-                      }),
+                      _isCreatingAccount = value.first;
+                      _errorMessage = null;
+                    }),
               style: SegmentedButton.styleFrom(
                 backgroundColor: AppPalette.white,
                 selectedBackgroundColor: AppPalette.forest,
@@ -282,9 +284,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 prefixIcon: const Icon(Icons.lock_outline_rounded),
                 suffixIcon: IconButton(
                   tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                  icon: Icon(_obscurePassword
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined),
+                  icon: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
                   onPressed: () =>
                       setState(() => _obscurePassword = !_obscurePassword),
                 ),
@@ -310,7 +314,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       height: 20,
                       width: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
                   : Text(creating ? 'Create account' : 'Sign in'),
             ),
@@ -354,23 +360,27 @@ class _Hero extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     return ClipRRect(
       borderRadius: BorderRadius.circular(32),
-      child: SizedBox(
-        height: 250,
+      // At least 250 tall, growing with large system text
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 250),
         child: Stack(
-          fit: StackFit.expand,
           children: [
-            const ArtworkPlaceholder(
-              seed: 'walkies',
-              icon: Icons.circle,
-              iconSize: 0,
-              palette: 0,
+            const Positioned.fill(
+              child: ArtworkPlaceholder(
+                seed: 'walkies',
+                icon: Icons.circle,
+                iconSize: 0,
+                palette: 0,
+              ),
             ),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0x002D5A4A), Color(0xCC1E3D33)],
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x002D5A4A), Color(0xCC1E3D33)],
+                  ),
                 ),
               ),
             ),
@@ -386,10 +396,13 @@ class _Hero extends StatelessWidget {
                       color: Colors.white,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.directions_walk_rounded,
-                        color: AppPalette.forest, size: 30),
+                    child: const Icon(
+                      Icons.directions_walk_rounded,
+                      color: AppPalette.forest,
+                      size: 30,
+                    ),
                   ),
-                  const Spacer(),
+                  const SizedBox(height: 56),
                   Text(
                     'Walkies',
                     style: text.displayMedium!.copyWith(color: Colors.white),

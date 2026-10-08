@@ -1,3 +1,4 @@
+import 'package:walkies/services/error_reporter.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:walkies/config/app_config.dart';
@@ -27,7 +28,8 @@ class _ArticleScreenState extends State<ArticleScreen> {
           contentId: widget.article.id,
           completed: true,
         )
-        .catchError((Object e) => debugPrint('Could not save view: $e'));
+        .catchError((Object e, StackTrace stack) =>
+            ErrorReporter.report(e, stack, context: 'Could not save view'));
   }
 
   Future<void> _openSource() async {

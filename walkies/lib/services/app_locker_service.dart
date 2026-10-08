@@ -1,3 +1,4 @@
+import 'package:walkies/services/error_reporter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:walkies/models/app_lock.dart';
@@ -172,6 +173,17 @@ class AppLockerService {
     }
   }
 
+  /// Today's steps as the app blocker sees them: the higher of the app's
+  /// own count and the phone's step sensor (which keeps counting while the
+  /// app is closed). Null if unavailable.
+  Future<int?> getNativeTodaySteps() async {
+    try {
+      return await platform.invokeMethod<int>('getTodaySteps');
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Steps still needed today, from the native store (which also counts
   /// steps taken while the app was closed). Null if unavailable.
   Future<int?> getStepsRemaining() async {
@@ -199,8 +211,8 @@ class AppLockerService {
         'updateLockedApps',
         {'packages': <String>[]},
       );
-    } catch (e) {
-      debugPrint('Error clearing locked apps: $e');
+    } catch (e, stack) {
+      ErrorReporter.report(e, stack, context: 'Error clearing locked apps');
     }
   }
 
@@ -214,8 +226,8 @@ class AppLockerService {
         'updateLockedApps',
         {'packages': packageNames},
       );
-    } catch (e) {
-      debugPrint('Error updating accessibility service: $e');
+    } catch (e, stack) {
+      ErrorReporter.report(e, stack, context: 'Error updating accessibility service');
     }
   }
 
@@ -224,8 +236,8 @@ class AppLockerService {
     try {
       final result = await platform.invokeMethod<bool>('enableAppLocking');
       return result ?? false;
-    } catch (e) {
-      debugPrint('Error enabling app locking: $e');
+    } catch (e, stack) {
+      ErrorReporter.report(e, stack, context: 'Error enabling app locking');
       return false;
     }
   }
@@ -235,8 +247,8 @@ class AppLockerService {
     try {
       final result = await platform.invokeMethod<bool>('disableAppLocking');
       return result ?? false;
-    } catch (e) {
-      debugPrint('Error disabling app locking: $e');
+    } catch (e, stack) {
+      ErrorReporter.report(e, stack, context: 'Error disabling app locking');
       return false;
     }
   }
@@ -246,9 +258,19 @@ class AppLockerService {
     try {
       final result = await platform.invokeMethod<bool>('isAppLockingEnabled');
       return result ?? false;
-    } catch (e) {
-      debugPrint('Error checking app locking status: $e');
+    } catch (e, stack) {
+      ErrorReporter.report(e, stack, context: 'Error checking app locking status');
       return false;
+    }
+  }
+
+  /// Open the system's battery optimisation list, where the user can stop
+  /// Android from closing Walkies (and with it the app blocker)
+  Future<void> openBatterySettings() async {
+    try {
+      await platform.invokeMethod('openBatterySettings');
+    } catch (e, stack) {
+      ErrorReporter.report(e, stack, context: 'Error opening battery settings');
     }
   }
 
@@ -256,8 +278,8 @@ class AppLockerService {
   Future<void> openAccessibilitySettings() async {
     try {
       await platform.invokeMethod('openAccessibilitySettings');
-    } catch (e) {
-      debugPrint('Error opening accessibility settings: $e');
+    } catch (e, stack) {
+      ErrorReporter.report(e, stack, context: 'Error opening accessibility settings');
     }
   }
 }

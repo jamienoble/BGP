@@ -1,3 +1,4 @@
+import 'package:walkies/services/error_reporter.dart';
 import 'package:flutter/material.dart';
 import 'package:walkies/config/app_config.dart';
 import 'package:walkies/models/content.dart';
@@ -52,8 +53,12 @@ class _EducationScreenState extends State<EducationScreen> {
         _progress = results[3] as Map<String, ContentProgress>;
         _isLoading = false;
       });
-    } catch (e) {
-      debugPrint('Error loading education content: $e');
+    } catch (e, stack) {
+      ErrorReporter.report(
+        e,
+        stack,
+        context: 'Error loading education content',
+      );
       if (!mounted) return;
       setState(() {
         _isLoading = false;
@@ -84,7 +89,9 @@ class _EducationScreenState extends State<EducationScreen> {
           );
     await Navigator.of(context).push(route);
     // Pick up new progress
-    final progress = await _contentService.getProgress().catchError((_) => _progress);
+    final progress = await _contentService.getProgress().catchError(
+      (_) => _progress,
+    );
     if (mounted) setState(() => _progress = progress);
   }
 
@@ -164,7 +171,10 @@ class _EducationScreenState extends State<EducationScreen> {
           icon: Icons.cloud_off_rounded,
           title: 'Couldn\'t load content',
           message: 'Check your connection and try again.',
-          action: OutlinedButton(onPressed: _load, child: const Text('Try again')),
+          action: OutlinedButton(
+            onPressed: _load,
+            child: const Text('Try again'),
+          ),
         ),
       ];
     }
@@ -210,7 +220,20 @@ String relativeDate(DateTime date) {
   if (diff.inMinutes < 60) return '${diff.inMinutes.clamp(1, 59)}m ago';
   if (diff.inHours < 24) return '${diff.inHours}h ago';
   if (diff.inDays < 2) return 'Yesterday';
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
   return '${date.day} ${months[date.month - 1]}';
 }
 
@@ -237,7 +260,8 @@ class _NewsCard extends StatelessWidget {
                 child: Text(
                   [
                     'LATEST NEWS',
-                    if (article.sourceName != null) article.sourceName!.toUpperCase(),
+                    if (article.sourceName != null)
+                      article.sourceName!.toUpperCase(),
                     relativeDate(article.sortDate).toUpperCase(),
                   ].join('  ·  '),
                   style: text.labelSmall,
@@ -259,15 +283,28 @@ class _NewsCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 14),
-          Row(
+          // Wraps onto two lines with large system text
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 10,
             children: [
-              Text(
-                'Read summary',
-                style: text.labelLarge!.copyWith(color: AppPalette.forest),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Read summary',
+                    style: text.labelLarge!.copyWith(color: AppPalette.forest),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 18,
+                    color: AppPalette.forest,
+                  ),
+                ],
               ),
-              const SizedBox(width: 4),
-              const Icon(Icons.arrow_forward_rounded, size: 18, color: AppPalette.forest),
-              const Spacer(),
               if (article.isAiDrafted)
                 const Pill('Reviewed summary', icon: Icons.verified_outlined),
             ],
@@ -329,7 +366,9 @@ class _ContentCard extends StatelessWidget {
                   top: 12,
                   child: Pill(
                     '${isVideo ? 'Video' : 'Article'} · ${contentLength(item)}',
-                    icon: isVideo ? Icons.play_arrow_rounded : Icons.article_outlined,
+                    icon: isVideo
+                        ? Icons.play_arrow_rounded
+                        : Icons.article_outlined,
                     background: AppPalette.white,
                   ),
                 ),
@@ -345,8 +384,11 @@ class _ContentCard extends StatelessWidget {
                           BoxShadow(color: Color(0x33000000), blurRadius: 16),
                         ],
                       ),
-                      child: const Icon(Icons.play_arrow_rounded,
-                          size: 36, color: AppPalette.forest),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        size: 36,
+                        color: AppPalette.forest,
+                      ),
                     ),
                   ),
                 if (fraction != null)
@@ -387,7 +429,9 @@ class _ContentCard extends StatelessWidget {
                   const SizedBox(height: 10),
                   Text(
                     'Continue watching',
-                    style: text.labelMedium!.copyWith(color: AppPalette.terracotta),
+                    style: text.labelMedium!.copyWith(
+                      color: AppPalette.terracotta,
+                    ),
                   ),
                 ],
               ],

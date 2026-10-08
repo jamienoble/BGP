@@ -44,6 +44,9 @@ class MainActivity : FlutterActivity() {
             StepStore.recordFlutterSteps(this, todaySteps, date)
             result.success(true)
           }
+          "getTodaySteps" -> {
+            result.success(StepStore.getTodaySteps(this))
+          }
           "getStepsRemaining" -> {
             val remaining = StepStore.getDailyGoal(this) - StepStore.getTodaySteps(this)
             result.success(maxOf(0, remaining))
@@ -65,6 +68,10 @@ class MainActivity : FlutterActivity() {
                 else result.error("APPS_FAILED", "Could not list installed apps", null)
               }
             }.start()
+          }
+          "openBatterySettings" -> {
+            openBatterySettings()
+            result.success(null)
           }
           "openAccessibilitySettings" -> {
             openAccessibilitySettings()
@@ -118,6 +125,21 @@ class MainActivity : FlutterActivity() {
     val out = ByteArrayOutputStream()
     bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
     return out.toByteArray()
+  }
+
+  /** Battery optimisation list; falls back to app details on devices without it */
+  private fun openBatterySettings() {
+    try {
+      startActivity(
+        Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+      )
+    } catch (e: Exception) {
+      startActivity(
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName"))
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+      )
+    }
   }
 
   private fun openAccessibilitySettings() {
