@@ -44,6 +44,9 @@ class MainActivity : FlutterActivity() {
             StepStore.recordFlutterSteps(this, todaySteps, date)
             result.success(true)
           }
+          "wasBlockedToday" -> {
+            result.success(StepStore.wasBlockedToday(this))
+          }
           "isAppLockingEnabled" -> {
             val isEnabled = isAccessibilityServiceEnabled()
             result.success(isEnabled)

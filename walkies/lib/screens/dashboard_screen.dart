@@ -3,13 +3,13 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walkies/services/step_tracking_service.dart';
 import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/services/permissions_service.dart';
 import 'package:walkies/services/notification_service.dart';
 import 'package:walkies/services/app_locker_service.dart';
 import 'package:walkies/services/goal_rules.dart';
-import 'package:walkies/screens/goal_management_screen.dart';
 import 'package:walkies/screens/app_lock_settings_screen.dart';
 import 'package:walkies/widgets/weekly_streak_widget.dart';
 import 'package:walkies/constants/app_constants.dart';
@@ -29,8 +29,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   final _notificationService = NotificationService();
   final _appLockerService = AppLockerService();
 
-  int? _savedGoal; // Goal as saved; may only apply from tomorrow
   int _dailyGoal = AppConstants.defaultDailyStepGoal; // Goal in force today
+  String? _preferredName;
   int _currentSteps = 0;
   bool? _lastGoalMet;
   bool _isLoading = true;
@@ -133,8 +133,17 @@ class _DashboardScreenState extends State<DashboardScreen>
     final todayKey = _dateKey(today);
     final resetDate = prefs.getString(AppConstants.prefStreakResetDate);
     final wasResetToday = resetDate == todayKey;
-
-    streakMap[todayKey] = !wasResetToday && steps >= goalSteps;
+    
+    // Check if a locked app was opened before reaching the goal
+    // (recorded by the native blocker)
+    final blockedAppOpenedBeforeGoal =
+        await _appLockerService.wasLockedAppOpenedBeforeGoalToday();
+    
+    // Only count today as streak success if:
+    // 1. Not reset today
+    // 2. Goal is met
+    // 3. No blocked apps were opened before goal was met
+    streakMap[todayKey] = !wasResetToday && steps >= goalSteps && !blockedAppOpenedBeforeGoal;
 
     // Keep only recent entries
     final cutoff = today.subtract(Duration(days: AppConstants.dayHistoryLimit));
@@ -215,16 +224,19 @@ class _DashboardScreenState extends State<DashboardScreen>
     try {
       // Initialize step tracking (requests permission internally if needed)
       await _stepTrackingService.initialize();
+      await _stepTrackingService.refreshForToday();
 
       final goal = await _supabaseService.getStepGoal();
       final dailyGoal = await GoalRules.effectiveGoal(goal?.dailySteps);
+      await _supabaseService.ensureUserProfile();
+      final preferredName = await _supabaseService.getPreferredName();
       // Seed from DB in case the pedometer hasn't fired yet
       final today = await _supabaseService.getTodaySteps();
 
       if (mounted) {
         setState(() {
-          _savedGoal = goal?.dailySteps;
           _dailyGoal = dailyGoal;
+          _preferredName = preferredName;
           // Take whichever is further along: the local count or the last cloud sync
           _currentSteps = max(_stepTrackingService.todaySteps, today?.steps ?? 0);
           _isLoading = false;
@@ -245,9 +257,10 @@ class _DashboardScreenState extends State<DashboardScreen>
       // Rebuild the native locked-app list from the cloud on every load
       await _appLockerService.syncLockedAppsToAccessibilityService();
 
-      // Listen to live step updates (today's delta, not raw lifetime count).
-      // _loadData runs on every resume, so drop the previous listener first.
+      // Avoid duplicate listeners when screen resumes repeatedly.
       await _stepSubscription?.cancel();
+
+      // Listen to live step updates (today's delta, not raw lifetime count)
       _stepSubscription = _stepTrackingService.todayStepsStream.listen((
         steps,
       ) async {
@@ -284,254 +297,347 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  /// Sign out. The auth wrapper in main.dart switches to the login screen.
-  Future<void> _signOut() async {
-    try {
-      await _stepTrackingService.flushToCloud();
-      // Locks belong to the account; don't leave them enforced signed out
-      await _appLockerService.clearAccessibilityServiceLockedApps();
-      await _supabaseService.signOut();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not sign out. Please try again.')),
-      );
-    }
-  }
-
-  Future<void> _deleteAccount() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete account?'),
-        content: const Text(
-          'This permanently deletes your account, step history, goal and '
-          'app locks. This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    try {
-      await _supabaseService.deleteAccount();
-      await _appLockerService.clearAccessibilityServiceLockedApps();
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not delete your account. Please try again.'),
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Center(child: CircularProgressIndicator());
     }
 
     final goalSteps = _dailyGoal;
     final progress = goalSteps > 0 ? _currentSteps / goalSteps : 0.0;
     final goalMet = _currentSteps >= goalSteps;
+    final stepsRemaining = (goalSteps - _currentSteps).clamp(0, goalSteps);
+    final stepDigits = _currentSteps
+        .clamp(0, 99999)
+        .toString()
+        .padLeft(5, '0')
+        .split('');
+    final distanceKm = (_currentSteps * 0.0008);
+    final greetingName = _preferredName ?? _userDisplayName();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Walkies Dashboard'),
-        actions: [
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'signOut') _signOut();
-              if (value == 'delete') _deleteAccount();
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'signOut', child: Text('Sign out')),
-              PopupMenuItem(value: 'delete', child: Text('Delete account')),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${_greeting()}, $greetingName',
+              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              goalMet
+                  ? 'Goal complete - your apps are unlocked'
+                  : '$stepsRemaining steps until you unlock',
+              style: TextStyle(fontSize: 16, color: const Color(0xFF5D7B6D)),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: const Color(0xFFE8D7C3)),
+            ),
+            color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: List.generate(stepDigits.length, (index) {
+                      final digit = stepDigits[index];
+                      return Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            right: index == stepDigits.length - 1 ? 0 : 8,
+                          ),
+                          child: Container(
+                            height: 116,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF5EFE5),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: const Color(0xFFE8D7C3)),
+                            ),
+                            child: Column(
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: Center(
+                                    child: Text(
+                                      ((int.parse(digit) + 9) % 10).toString(),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: const Color(0xFF8BA39E),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Divider(
+                                  height: 1,
+                                  thickness: 1,
+                                  color: const Color(0xFFE8D7C3),
+                                ),
+                                Expanded(
+                                  flex: 5,
+                                  child: Center(
+                                    child: Text(
+                                      digit,
+                                      style: const TextStyle(
+                                        fontSize: 40,
+                                        height: 1.0,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF2D5A4A),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Divider(
+                                  height: 1,
+                                  thickness: 1,
+                                  color: const Color(0xFFE8D7C3),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Center(
+                                    child: Text(
+                                      ((int.parse(digit) + 1) % 10).toString(),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: const Color(0xFF8BA39E),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '$_currentSteps steps',
+                        style: const TextStyle(
+                          color: Color(0xFF2D5A4A),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        '/$goalSteps',
+                        style: TextStyle(
+                          color: const Color(0xFF8BA39E),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  LinearProgressIndicator(
+                    value: progress.clamp(0.0, 1.0),
+                    minHeight: 8,
+                    borderRadius: BorderRadius.circular(999),
+                    color: Colors.deepPurple,
+                    backgroundColor: Colors.deepPurple.shade100,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _statCard('DISTANCE', distanceKm.toStringAsFixed(1), 'km'),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _statCard('STREAK', '$_currentStreak', 'days'),
+              ),
             ],
           ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // Permission warning if step tracking failed
-            if (_stepTrackingService.initializationError != null)
-              Container(
-                padding: const EdgeInsets.all(12.0),
-                margin: const EdgeInsets.only(bottom: 16.0),
-                decoration: BoxDecoration(
-                  color: Colors.orange[50],
-                  border: Border.all(color: Colors.orange[300]!),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Permission Needed',
-                      style: TextStyle(
-                        color: Colors.orange[900],
-                        fontWeight: FontWeight.bold,
+          const SizedBox(height: 12),
+          Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.grey.shade200),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "TODAY'S NUDGE",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _currentSteps < goalSteps * 0.5
+                        ? 'A 10-min walk now can make a big dent in your goal.'
+                        : 'You are over halfway there. Keep your momentum going.',
+                    style: TextStyle(
+                      color: Colors.grey.shade800,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          WeeklyStreakWidget(
+            dailyGoalsMet: _dailyGoalsMet,
+            currentStreak: _currentStreak,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const AppLockSettingsScreen(),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Walkies needs Activity Recognition permission to keep your step progress accurate.',
-                      style: TextStyle(color: Colors.orange[800], fontSize: 13),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange[700],
-                          ),
-                          onPressed: () async {
-                            final permissionsService = PermissionsService();
-                            await permissionsService.openAppSettings();
-                          },
-                          child: const Text(
-                            'Open Settings',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton(
-                          onPressed: _loadData,
-                          child: const Text('Refresh'),
-                        ),
-                      ],
-                    ),
-                  ],
+                    );
+                  },
+                  icon: const Icon(Icons.lock_outline),
+                  label: const Text('App Locks'),
                 ),
               ),
-            // Steps Progress Card
-            Card(
-              elevation: 4,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    const Text(
-                      'Today\'s Steps',
-                      style: TextStyle(fontSize: 16),
+            ],
+          ),
+          if (_stepTrackingService.initializationError != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12.0),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                border: Border.all(color: Colors.orange[300]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Permission Needed',
+                    style: TextStyle(
+                      color: Colors.orange[900],
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(height: 16),
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        SizedBox(
-                          height: 200,
-                          width: 200,
-                          child: CircularProgressIndicator(
-                            value: progress.clamp(0.0, 1.0),
-                            strokeWidth: 8,
-                            color: goalMet ? Colors.green : Colors.orange,
-                          ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Walkies needs Activity Recognition permission to keep your step progress accurate.',
+                    style: TextStyle(color: Colors.orange[800], fontSize: 13),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange[700],
                         ),
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              '$_currentSteps',
-                              style: const TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              'of $goalSteps steps',
-                              style: const TextStyle(fontSize: 14),
-                            ),
-                          ],
+                        onPressed: () async {
+                          final permissionsService = PermissionsService();
+                          await permissionsService.openAppSettings();
+                        },
+                        child: const Text(
+                          'Open Settings',
+                          style: TextStyle(color: Colors.white),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    if (goalMet)
-                      const Chip(
-                        label: Text('Goal Met! 🎉'),
-                        backgroundColor: Colors.green,
-                        labelStyle: TextStyle(color: Colors.white),
-                      )
-                    else
-                      Chip(
-                        label: Text('${goalSteps - _currentSteps} steps to go'),
-                        backgroundColor: Colors.orange,
-                        labelStyle: const TextStyle(color: Colors.white),
                       ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Weekly Streak Widget
-            WeeklyStreakWidget(
-              dailyGoalsMet: _dailyGoalsMet,
-              currentStreak: _currentStreak,
-            ),
-            const SizedBox(height: 24),
-
-            // App Lock Status
-            Card(
-              elevation: 4,
-              child: ListTile(
-                title: const Text('App Locks Active'),
-                subtitle: const Text('Tap to manage locked apps'),
-                trailing: const Icon(Icons.arrow_forward),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const AppLockSettingsScreen(),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Goal Management
-            Card(
-              elevation: 4,
-              child: ListTile(
-                title: const Text('Daily Goal'),
-                subtitle: Text(
-                  _savedGoal != null && _savedGoal != goalSteps
-                      ? '$goalSteps steps today, $_savedGoal from tomorrow'
-                      : '$goalSteps steps',
-                ),
-                trailing: const Icon(Icons.arrow_forward),
-                onTap: () {
-                  Navigator.of(context)
-                      .push(
-                        MaterialPageRoute(
-                          builder: (context) => const GoalManagementScreen(),
-                        ),
-                      )
-                      .then((_) => _loadData());
-                },
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: _loadData,
+                        child: const Text('Refresh'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
-        ),
+        ],
+      ),
+    );
+  }
+
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  String _userDisplayName() {
+    final email = Supabase.instance.client.auth.currentUser?.email;
+    if (email == null || email.isEmpty) {
+      return 'there';
+    }
+    final localPart = email.split('@').first;
+    final cleaned = localPart.split(RegExp(r'[._-]')).first;
+    if (cleaned.isEmpty) {
+      return 'there';
+    }
+    return cleaned[0].toUpperCase() + cleaned.substring(1);
+  }
+
+  Widget _statCard(String label, String value, String unit) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade500,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(width: 3),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: Text(
+                  unit,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

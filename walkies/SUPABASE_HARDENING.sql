@@ -5,6 +5,7 @@
 ALTER TABLE step_goals FORCE ROW LEVEL SECURITY;
 ALTER TABLE daily_steps FORCE ROW LEVEL SECURITY;
 ALTER TABLE app_locks FORCE ROW LEVEL SECURITY;
+ALTER TABLE user_profiles FORCE ROW LEVEL SECURITY;
 
 -- 2) Recreate explicit authenticated-only policies for strict per-user access
 DROP POLICY IF EXISTS "Users can view their own step goals" ON step_goals;
@@ -82,5 +83,31 @@ CREATE POLICY "Users can update their own app locks"
 
 CREATE POLICY "Users can delete their own app locks"
   ON app_locks FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can view their own profile" ON user_profiles;
+DROP POLICY IF EXISTS "Users can create their own profile" ON user_profiles;
+DROP POLICY IF EXISTS "Users can update their own profile" ON user_profiles;
+DROP POLICY IF EXISTS "Users can delete their own profile" ON user_profiles;
+
+CREATE POLICY "Users can view their own profile"
+  ON user_profiles FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create their own profile"
+  ON user_profiles FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own profile"
+  ON user_profiles FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own profile"
+  ON user_profiles FOR DELETE
   TO authenticated
   USING (auth.uid() = user_id);

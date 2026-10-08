@@ -60,6 +60,8 @@ class AppBlockingAccessibilityService : AccessibilityService(), SensorEventListe
         if (sensorManager == null) startStepCounter()
         // Goal met today: allow the app, but keep it in the locked list for tomorrow
         if (getStepsRemaining() == 0) return
+        // Opening a locked app before the goal costs today's streak day
+        StepStore.recordBlockedAttempt(this)
         mainHandler.post {
             try {
                 performGlobalAction(GLOBAL_ACTION_HOME)

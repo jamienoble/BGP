@@ -12,6 +12,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _preferredNameController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -42,6 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _preferredNameController.dispose();
     super.dispose();
   }
 
@@ -81,6 +83,14 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleSignUp() async {
+    final preferredName = _preferredNameController.text.trim();
+    if (preferredName.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please enter your preferred name.';
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -100,6 +110,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await _supabaseService.signUp(
         _emailController.text.trim(),
         _passwordController.text,
+        preferredName: preferredName,
       );
 
       if (mounted) {
@@ -241,6 +252,15 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             const SizedBox(height: 8),
+            TextField(
+              controller: _preferredNameController,
+              decoration: const InputDecoration(
+                labelText: 'Preferred name (new accounts)',
+                border: OutlineInputBorder(),
+              ),
+              enabled: !_isLoading,
+            ),
+            const SizedBox(height: 24),
             Row(
               children: [
                 Expanded(

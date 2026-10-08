@@ -63,7 +63,6 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
 
   Future<void> _loadData() async {
     try {
-      // Only load social media apps instead of all apps
       final lockedApps = await _supabaseService.getLockedApps();
       final lockedIds = lockedApps.map((app) => app.appPackageName).toList();
       // Social media apps by default; anything already locked always shows
@@ -85,6 +84,9 @@ class _AppLockSettingsScreenState extends State<AppLockSettingsScreen>
         dailyGoal: dailyGoal,
         todaySteps: steps,
       );
+      
+      // Force refresh locked apps to accessibility service
+      // This catches any day resets that may have happened while app was closed
       await _appLockerService.syncLockedAppsToAccessibilityService();
 
       if (!mounted) return;

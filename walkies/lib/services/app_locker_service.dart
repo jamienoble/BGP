@@ -164,6 +164,16 @@ class AppLockerService {
     }
   }
 
+  /// Whether a locked app was opened today before the goal was met
+  /// (recorded by the native blocker). Such a day doesn't count for the streak.
+  Future<bool> wasLockedAppOpenedBeforeGoalToday() async {
+    try {
+      return await platform.invokeMethod<bool>('wasBlockedToday') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Remove every lock from the native blocker (e.g. on sign-out)
   Future<void> clearAccessibilityServiceLockedApps() async {
     try {

@@ -1,12 +1,11 @@
-import 'dart:math';
-
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkies/constants/app_constants.dart';
 import 'package:walkies/utils/date_utils.dart' as date_utils;
 
-/// A lowered goal only takes effect from the next day, so it cannot be used
-/// to unlock apps immediately. The previous goal is held as a floor for the
-/// rest of the day it was lowered on.
+/// Goal changes take effect from the next day. The goal that was in force
+/// when the day's first change was made stays pinned until midnight, so
+/// lowering the goal cannot unlock apps early and raising it cannot
+/// re-lock apps that were already earned.
 class GoalRules {
   /// The goal that applies today, given the saved goal.
   static Future<int> effectiveGoal(int? savedGoal) async {
@@ -16,20 +15,16 @@ class GoalRules {
         date_utils.DateUtils.todayDateString()) {
       return goal;
     }
-    return max(goal, prefs.getInt(AppConstants.prefGoalFloorValue) ?? 0);
+    return prefs.getInt(AppConstants.prefGoalFloorValue) ?? goal;
   }
 
-  /// Keep [previousGoal] in force for the rest of today.
-  static Future<void> holdForToday(int previousGoal) async {
+  /// Pin [previousGoal] for the rest of today. Later changes on the same day
+  /// keep the original pin.
+  static Future<void> pinForToday(int previousGoal) async {
     final prefs = await SharedPreferences.getInstance();
     final today = date_utils.DateUtils.todayDateString();
-    final existing = prefs.getString(AppConstants.prefGoalFloorDate) == today
-        ? prefs.getInt(AppConstants.prefGoalFloorValue) ?? 0
-        : 0;
+    if (prefs.getString(AppConstants.prefGoalFloorDate) == today) return;
     await prefs.setString(AppConstants.prefGoalFloorDate, today);
-    await prefs.setInt(
-      AppConstants.prefGoalFloorValue,
-      max(existing, previousGoal),
-    );
+    await prefs.setInt(AppConstants.prefGoalFloorValue, previousGoal);
   }
 }

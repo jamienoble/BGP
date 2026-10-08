@@ -32,10 +32,20 @@ CREATE TABLE IF NOT EXISTS app_locks (
   UNIQUE(user_id, app_package_name)
 );
 
+-- User Profiles table
+CREATE TABLE IF NOT EXISTS user_profiles (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+  preferred_name text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
 -- Enable RLS
 ALTER TABLE step_goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_steps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_locks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS Policies
 CREATE POLICY "Users can view their own step goals"
@@ -79,4 +89,21 @@ CREATE POLICY "Users can update their own app locks"
 
 CREATE POLICY "Users can delete their own app locks"
   ON app_locks FOR DELETE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view their own profile"
+  ON user_profiles FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create their own profile"
+  ON user_profiles FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own profile"
+  ON user_profiles FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own profile"
+  ON user_profiles FOR DELETE
   USING (auth.uid() = user_id);

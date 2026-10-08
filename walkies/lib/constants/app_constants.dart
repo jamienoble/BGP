@@ -3,7 +3,8 @@ class AppConstants {
   // Default values
   static const int defaultDailyStepGoal = 7000;
   static const double notificationThresholdPercent = 80.0;
-  static const double maxStepsPerSecond = 4.0;
+  static const double maxStepsPerSecond = 2.2; // Normal walking is 1.5-2.0, allows some variance
+  static const double minStepIntervalMs = 300.0; // Minimum 300ms between steps to filter noise
   static const int maxStepsValue = 999999;
 
   // SharedPreferences keys for step tracking

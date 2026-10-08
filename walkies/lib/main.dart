@@ -5,14 +5,18 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walkies/services/supabase_service.dart';
 import 'package:walkies/screens/login_screen.dart';
 import 'package:walkies/screens/dashboard_screen.dart';
+import 'package:walkies/screens/app_lock_settings_screen.dart';
+import 'package:walkies/screens/settings_screen.dart';
+import 'package:walkies/screens/education_screen.dart';
+import 'package:walkies/screens/community_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase with your credentials
-  // Replace with your actual Supabase URL and anon key
+  // The publishable (anon) key is meant to ship in the app; data is
+  // protected by row level security in Supabase
   await Supabase.initialize(
-    url: 'https://cbanimdilwtfmouyfumr.supabase.co', // e.g., 'https://xyzabc.supabase.co'
+    url: 'https://cbanimdilwtfmouyfumr.supabase.co',
     anonKey: 'sb_publishable_6a52AMpgt5KIdS3KcGzEcQ_5P212w-l',
   );
 
@@ -25,21 +29,20 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Walkies - App Locker',
+      title: 'Walkies',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.dark,
+          seedColor: const Color(0xFF2D5A4A), // Forest green
         ),
         useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFFFFF8F0), // Warm cream
       ),
-      // Login vs dashboard is decided only by the auth state below, so
+      // Login vs main app is decided only by the auth state below, so
       // screens never navigate between the two themselves
       home: const _AuthWrapper(),
+      routes: {
+        '/app_locks': (_) => const AppLockSettingsScreen(),
+      },
     );
   }
 }
@@ -130,11 +133,81 @@ class _AuthWrapperState extends State<_AuthWrapper> {
         }
 
         if (snapshot.hasData && snapshot.data?.session != null) {
-          return const DashboardScreen();
+          return const MainTabNavigator();
         }
 
         return const LoginScreen();
       },
+    );
+  }
+}
+
+class MainTabNavigator extends StatefulWidget {
+  const MainTabNavigator({Key? key}) : super(key: key);
+
+  @override
+  State<MainTabNavigator> createState() => _MainTabNavigatorState();
+}
+
+class _MainTabNavigatorState extends State<MainTabNavigator> {
+  int _currentIndex = 0;
+
+  // Kept alive in an IndexedStack so switching tabs doesn't rebuild
+  // each screen (and re-run its loading and listeners)
+  final List<Widget> _screens = const [
+    DashboardScreen(),
+    EducationScreen(),
+    CommunityScreen(),
+  ];
+
+  final List<String> _titles = const [
+    'Walkies',
+    'Education',
+    'Community',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_titles[_currentIndex]),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const SettingsScreen(),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+      body: IndexedStack(index: _currentIndex, children: _screens),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (int index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.school),
+            label: 'Education',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people),
+            label: 'Community',
+          ),
+        ],
+      ),
     );
   }
 }

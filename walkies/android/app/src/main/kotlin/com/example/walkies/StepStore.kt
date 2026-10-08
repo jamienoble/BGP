@@ -27,6 +27,7 @@ object StepStore {
     private const val KEY_SENSOR_BASELINE = "sensor_baseline"
     private const val KEY_SENSOR_LAST_RAW = "sensor_last_raw"
     private const val KEY_SENSOR_CARRIED = "sensor_carried"
+    private const val KEY_BLOCKED_DATE = "blocked_before_goal_date"
 
     fun todayString(): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
@@ -84,6 +85,14 @@ object StepStore {
             .putInt(KEY_SENSOR_CARRIED, carried)
             .apply()
     }
+
+    /** Record that a locked app was blocked today (goal not yet met). */
+    fun recordBlockedAttempt(context: Context) {
+        prefs(context).edit().putString(KEY_BLOCKED_DATE, todayString()).apply()
+    }
+
+    fun wasBlockedToday(context: Context): Boolean =
+        prefs(context).getString(KEY_BLOCKED_DATE, "") == todayString()
 
     /** Best known step count for today from either source. */
     fun getTodaySteps(context: Context): Int {

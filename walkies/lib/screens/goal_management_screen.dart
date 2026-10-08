@@ -66,8 +66,8 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
     try {
       final previousGoal = _currentGoal;
       await _supabaseService.createOrUpdateStepGoal(newGoal);
-      if (previousGoal != null && newGoal < previousGoal) {
-        await GoalRules.holdForToday(previousGoal);
+      if (previousGoal != null && newGoal != previousGoal) {
+        await GoalRules.pinForToday(previousGoal);
       }
       final todayGoal = await GoalRules.effectiveGoal(newGoal);
       final prefs = await SharedPreferences.getInstance();
@@ -86,7 +86,7 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
             content: Text(
               resetStreak
                   ? 'New goal starts tomorrow. Your streak has been reset.'
-                  : 'Goal updated successfully',
+                  : 'New goal starts tomorrow.',
             ),
           ),
         );
@@ -117,6 +117,13 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
       );
       return;
     }
+    if (newGoal == _currentGoal) {
+      Navigator.of(context).pop();
+      return;
+    }
+    // Any change applies from tomorrow; today keeps the goal already in force
+    final todayGoal = await GoalRules.effectiveGoal(_currentGoal);
+    if (!mounted) return;
     final isGoalReduced = _currentGoal != null && newGoal < _currentGoal!;
     if (isGoalReduced) {
       final shouldReset = await showDialog<bool>(
@@ -125,7 +132,7 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
           title: const Text('Lower your goal?'),
           content: Text(
             'Your new goal of $newGoal steps starts tomorrow. '
-            'Today\'s goal stays at ${_currentGoal!} steps.\n\n'
+            'Today\'s goal stays at $todayGoal steps.\n\n'
             'Lowering your goal also resets your streak to 0. Continue?',
           ),
           actions: [
@@ -145,6 +152,27 @@ class _GoalManagementScreenState extends State<GoalManagementScreen> {
       }
       await _persistGoal(newGoal, resetStreak: true);
       return;
+    }
+
+    // Check if goal is being increased
+    final isGoalIncreased = _currentGoal != null && newGoal > _currentGoal!;
+    if (isGoalIncreased) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Goal Change Notice'),
+          content: Text(
+            'Your new goal of $newGoal steps starts tomorrow. '
+            'Today\'s goal stays at $todayGoal steps.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Got it'),
+            ),
+          ],
+        ),
+      );
     }
 
     await _persistGoal(newGoal, resetStreak: false);
